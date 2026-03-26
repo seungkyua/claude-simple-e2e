@@ -1,0 +1,90 @@
+{
+  "skill_name": "system-design",
+  "iteration": 1,
+  "timestamp": "2026-03-26T00:00:00Z",
+  "configurations": [
+    {
+      "name": "with_skill",
+      "results": [
+        {
+          "eval_name": "cart-module-small-scale",
+          "pass_rate": 1.0,
+          "passed": 6,
+          "total": 6,
+          "tokens": 23730,
+          "duration_seconds": 103.7
+        },
+        {
+          "eval_name": "anon-feedback-fullstack",
+          "pass_rate": 1.0,
+          "passed": 9,
+          "total": 9,
+          "tokens": 34586,
+          "duration_seconds": 240.7
+        },
+        {
+          "eval_name": "taskflow-no-stack",
+          "pass_rate": 1.0,
+          "passed": 8,
+          "total": 8,
+          "tokens": 34190,
+          "duration_seconds": 235.7
+        }
+      ],
+      "aggregate": {
+        "mean_pass_rate": 1.0,
+        "stddev_pass_rate": 0.0,
+        "mean_tokens": 30835,
+        "mean_duration_seconds": 193.4
+      }
+    },
+    {
+      "name": "without_skill",
+      "results": [
+        {
+          "eval_name": "cart-module-small-scale",
+          "pass_rate": 0.67,
+          "passed": 4,
+          "total": 6,
+          "tokens": 15396,
+          "duration_seconds": 62.5
+        },
+        {
+          "eval_name": "anon-feedback-fullstack",
+          "pass_rate": 0.67,
+          "passed": 6,
+          "total": 9,
+          "tokens": 25404,
+          "duration_seconds": 197.6
+        },
+        {
+          "eval_name": "taskflow-no-stack",
+          "pass_rate": 0.75,
+          "passed": 6,
+          "total": 8,
+          "tokens": 19141,
+          "duration_seconds": 125.6
+        }
+      ],
+      "aggregate": {
+        "mean_pass_rate": 0.70,
+        "stddev_pass_rate": 0.04,
+        "mean_tokens": 19980,
+        "mean_duration_seconds": 128.6
+      }
+    }
+  ],
+  "delta": {
+    "pass_rate": "+30%",
+    "tokens": "+54%",
+    "duration": "+50%"
+  },
+  "analyst_observations": [
+    "with_skill이 모든 테스트 케이스에서 100% assertion 통과율 달성 (vs without_skill 70%)",
+    "Mermaid 다이어그램: with_skill은 3개 테스트 모두 Mermaid 포함 (총 12개), without_skill은 0개 — 가장 큰 차별화 요소",
+    "3줄 요약 + 비유: with_skill만 일관되게 포함. without_skill은 3개 모두 누락 — 스킬의 고유 기능",
+    "보안/API/ERD 등 핵심 섹션은 without_skill도 대체로 포함 — 기본 능력이 있어 비차별화 assertion",
+    "토큰/시간 tradeoff: with_skill이 약 50% 더 많은 토큰/시간을 사용하지만, 이는 더 풍부한 다이어그램과 구조화된 섹션 때문",
+    "Eval 2(풀스택)에서 가장 큰 품질 차이: with_skill은 OWASP 매핑 + 타이밍 공격 방지 + AES-256-GCM 등 상세 보안 설계 포함"
+  ]
+}

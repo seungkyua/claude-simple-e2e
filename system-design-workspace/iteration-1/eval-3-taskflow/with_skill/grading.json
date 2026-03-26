@@ -1,0 +1,46 @@
+{
+  "eval_id": 3,
+  "run_type": "with_skill",
+  "expectations": [
+    {
+      "text": "기술 스택 추천이 포함되어 있다",
+      "passed": true,
+      "evidence": "프론트/백엔드/DB/인프라 전체 스택 추천 테이블 포함. 각 기술별 선정 근거 + 라이선스 명시"
+    },
+    {
+      "text": "실시간 동기화를 위한 설계가 포함되어 있다",
+      "passed": true,
+      "evidence": "Socket.IO 이벤트 설계(10종+ 이벤트), 낙관적 잠금(version 필드), Redis Pub/Sub 다중 서버 동기화 상세 설명"
+    },
+    {
+      "text": "Mermaid 다이어그램이 2개 이상 포함되어 있다",
+      "passed": true,
+      "evidence": "6개의 ```mermaid 블록: flowchart(아키텍처), erDiagram(ERD), sequence(실시간 동기화), stateDiagram(낙관적 업데이트), stateDiagram(인증 상태), sequence(인증 시퀀스)"
+    },
+    {
+      "text": "데이터베이스 모델링이 포함되어 있다",
+      "passed": true,
+      "evidence": "Mermaid erDiagram + 9개 테이블 상세 명세 (users, teams, team_members, boards, board_columns, tasks, labels, task_labels, comments, notifications)"
+    },
+    {
+      "text": "API 인터페이스 명세가 포함되어 있다",
+      "passed": true,
+      "evidence": "REST API 18개 엔드포인트 + WebSocket 이벤트 11종 명세 (Request/Response 포함)"
+    },
+    {
+      "text": "보안 설계 섹션이 포함되어 있다",
+      "passed": true,
+      "evidence": "OWASP 기반 7개 위협 대응, Rate Limiting 4단계, JWT Refresh Token 회전, 보안 헤더, 라이선스 검토 14개 패키지"
+    },
+    {
+      "text": "3줄 요약 및 비유가 마지막에 포함되어 있다",
+      "passed": true,
+      "evidence": "마지막 섹션에 3줄 요약 + 비유 포함"
+    },
+    {
+      "text": "전체 내용이 한국어로 작성되어 있다",
+      "passed": true,
+      "evidence": "모든 섹션이 한국어로 작성됨"
+    }
+  ]
+}

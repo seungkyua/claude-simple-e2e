@@ -1,0 +1,36 @@
+{
+  "eval_id": 1,
+  "run_type": "with_skill",
+  "expectations": [
+    {
+      "text": "시스템 아키텍처 Mermaid 다이어그램이 포함되어 있다",
+      "passed": true,
+      "evidence": "2개의 ```mermaid 블록 존재 (flowchart LR 시스템 아키텍처 + flowchart TD 데이터 흐름도)"
+    },
+    {
+      "text": "DB 없는 모듈임을 인식하고 데이터 구조체/인터페이스 명세로 대체했다",
+      "passed": true,
+      "evidence": "섹션 3에 'DB가 없는 순수 모듈이므로, ERD 대신 핵심 데이터 구조체를 정의한다'고 명시. CartItem, Coupon, CartSummary 인터페이스 정의"
+    },
+    {
+      "text": "API 대신 public 함수/메서드 시그니처를 명세했다",
+      "passed": true,
+      "evidence": "섹션 4에 'HTTP API가 아닌 순수 모듈이므로, public 함수 시그니처와 입출력 명세를 정의한다'고 명시. 5개 함수 시그니처 상세 정의"
+    },
+    {
+      "text": "보안 관련 섹션이 포함되어 있다",
+      "passed": true,
+      "evidence": "섹션 7 보안 설계: 위협 분석 테이블(4개 위협), 입력 검증 정책 코드, 민감 데이터 처리, 라이선스 검토 포함"
+    },
+    {
+      "text": "3줄 요약 및 비유가 마지막에 포함되어 있다",
+      "passed": true,
+      "evidence": "섹션 9에 3줄 요약 + '마트 계산대의 점원' 비유 포함"
+    },
+    {
+      "text": "전체 내용이 한국어로 작성되어 있다",
+      "passed": true,
+      "evidence": "모든 섹션 제목, 설명, 테이블이 한국어로 작성됨"
+    }
+  ]
+}
