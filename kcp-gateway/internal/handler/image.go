@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
+	ossdk "github.com/kcp-cli/kcp-gateway/pkg/openstack"
 )
 
 // ImageHandler 는 이미지 관련 API를 처리한다

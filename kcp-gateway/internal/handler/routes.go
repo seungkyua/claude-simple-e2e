@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
-	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
+	ossdk "github.com/kcp-cli/kcp-gateway/pkg/openstack"
 	"github.com/kcp-cli/kcp-gateway/config"
 )
 

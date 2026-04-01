@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
+	ossdk "github.com/kcp-cli/kcp-gateway/pkg/openstack"
 )
 
 // IdentityHandler 는 프로젝트, 사용자, 역할 관련 API를 처리한다

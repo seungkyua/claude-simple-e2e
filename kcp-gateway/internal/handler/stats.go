@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
+	ossdk "github.com/kcp-cli/kcp-gateway/pkg/openstack"
 )
 
 // StatsHandler 는 대시보드 통계 관련 API를 처리한다

@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
+	ossdk "github.com/kcp-cli/kcp-gateway/pkg/openstack"
 )
 
 // NetworkHandler 는 네트워크, 서브넷, 라우터, 보안그룹 관련 API를 처리한다
