@@ -42,6 +42,8 @@ export default function ServerDetailPanel({ serverId, onClose, onAction }: Props
   const [server, setServer] = useState<ServerDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState('')
 
   useEffect(() => {
     api.get(`/compute/servers/${serverId}`)
@@ -65,14 +67,26 @@ export default function ServerDetailPanel({ serverId, onClose, onAction }: Props
     }
   }
 
-  const handleDelete = async () => {
-    if (!confirm('이 서버를 삭제하시겠습니까?')) return
+  const handleDeleteClick = () => {
+    setDeleteMessage('')
+    setShowDeleteConfirm(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    setActionLoading('delete')
     try {
       await api.delete(`/compute/servers/${serverId}`)
+      setDeleteMessage(`'${server?.name}' 서버가 삭제되었습니다.`)
       onAction()
-      onClose()
+      // 삭제 완료 메시지를 1.5초 보여준 후 패널 닫기
+      setTimeout(() => {
+        onClose()
+      }, 1500)
     } catch {
-      // 에러 무시
+      setDeleteMessage('서버 삭제에 실패했습니다.')
+    } finally {
+      setActionLoading('')
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -163,12 +177,51 @@ export default function ServerDetailPanel({ serverId, onClose, onAction }: Props
               </button>
             )}
             <button
-              onClick={handleDelete}
-              className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium hover:bg-red-700"
+              onClick={handleDeleteClick}
+              disabled={!!actionLoading}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium hover:bg-red-700 disabled:opacity-50"
             >
-              삭제
+              {actionLoading === 'delete' ? '삭제 중...' : '삭제'}
             </button>
           </div>
+
+          {/* 삭제 확인 다이얼로그 */}
+          {showDeleteConfirm && (
+            <div className="mb-4 rounded border border-red-800 bg-red-900/20 p-4">
+              <p className="mb-3 text-sm text-red-300">
+                &apos;{server.name}&apos; 서버를 삭제하시겠습니까?
+              </p>
+              <p className="mb-3 text-xs text-gray-400">
+                이 작업은 되돌릴 수 없습니다. 서버와 관련된 모든 데이터가 삭제됩니다.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={actionLoading === 'delete'}
+                  className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                >
+                  {actionLoading === 'delete' ? '삭제 중...' : '삭제 확인'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded bg-gray-700 px-3 py-1.5 text-xs hover:bg-gray-600"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 삭제 결과 메시지 */}
+          {deleteMessage && (
+            <div className={`mb-4 rounded border px-4 py-2 text-sm ${
+              deleteMessage.includes('실패')
+                ? 'border-red-800 bg-red-900/30 text-red-400'
+                : 'border-green-800 bg-green-900/30 text-green-400'
+            }`}>
+              {deleteMessage}
+            </div>
+          )}
 
           {/* Field / Value 테이블 */}
           <table className="w-full text-sm">
