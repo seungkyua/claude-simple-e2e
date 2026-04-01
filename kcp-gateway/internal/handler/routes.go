@@ -5,8 +5,8 @@ import (
 	"database/sql"
 
 	"github.com/gin-gonic/gin"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 	"github.com/kcp-cli/kcp-gateway/config"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
 )
 
 // RegisterAuthRoutes 는 인증 관련 라우트를 등록한다
@@ -19,7 +19,7 @@ func RegisterAuthRoutes(rg *gin.RouterGroup, db *sql.DB, cfg *config.Config) {
 }
 
 // RegisterComputeRoutes 는 Compute 관련 라우트를 등록한다
-func RegisterComputeRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
+func RegisterComputeRoutes(rg *gin.RouterGroup, osClient *ossdk.Client) {
 	compute := rg.Group("/compute")
 	h := NewComputeHandler(osClient)
 	compute.GET("/servers", h.ListServers)
@@ -33,7 +33,7 @@ func RegisterComputeRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 }
 
 // RegisterNetworkRoutes 는 Network 관련 라우트를 등록한다
-func RegisterNetworkRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
+func RegisterNetworkRoutes(rg *gin.RouterGroup, osClient *ossdk.Client) {
 	net := rg.Group("/network")
 	h := NewNetworkHandler(osClient)
 	net.GET("/networks", h.ListNetworks)
@@ -53,7 +53,7 @@ func RegisterNetworkRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 }
 
 // RegisterStorageRoutes 는 Storage 관련 라우트를 등록한다
-func RegisterStorageRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
+func RegisterStorageRoutes(rg *gin.RouterGroup, osClient *ossdk.Client) {
 	storage := rg.Group("/storage")
 	h := NewStorageHandler(osClient)
 	storage.GET("/volumes", h.ListVolumes)
@@ -67,7 +67,7 @@ func RegisterStorageRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 }
 
 // RegisterIdentityRoutes 는 Identity 관련 라우트를 등록한다
-func RegisterIdentityRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
+func RegisterIdentityRoutes(rg *gin.RouterGroup, osClient *ossdk.Client) {
 	identity := rg.Group("/identity")
 	h := NewIdentityHandler(osClient)
 	identity.GET("/projects", h.ListProjects)
@@ -81,7 +81,7 @@ func RegisterIdentityRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 }
 
 // RegisterImageRoutes 는 Image 관련 라우트를 등록한다
-func RegisterImageRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
+func RegisterImageRoutes(rg *gin.RouterGroup, osClient *ossdk.Client) {
 	image := rg.Group("/image")
 	h := NewImageHandler(osClient)
 	image.GET("/images", h.ListImages)
@@ -98,7 +98,7 @@ func RegisterAuditRoutes(rg *gin.RouterGroup, db *sql.DB) {
 }
 
 // RegisterStatsRoutes 는 통계 라우트를 등록한다
-func RegisterStatsRoutes(rg *gin.RouterGroup, osClient *openstack.Client, db *sql.DB) {
+func RegisterStatsRoutes(rg *gin.RouterGroup, osClient *ossdk.Client, db *sql.DB) {
 	stats := rg.Group("/stats")
 	h := NewStatsHandler(osClient, db)
 	stats.GET("/dashboard", h.Dashboard)

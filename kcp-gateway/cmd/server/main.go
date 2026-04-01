@@ -6,11 +6,11 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 	"github.com/kcp-cli/kcp-gateway/config"
 	"github.com/kcp-cli/kcp-gateway/internal/database"
 	"github.com/kcp-cli/kcp-gateway/internal/handler"
 	"github.com/kcp-cli/kcp-gateway/internal/middleware"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
 )
 
 func main() {
@@ -41,8 +41,8 @@ func main() {
 		log.Printf("초기 관리자 계정 확인 실패: %v", err)
 	}
 
-	// OpenStack 클라이언트 초기화
-	osClient, err := openstack.NewClient(&openstack.OSConfig{
+	// OpenStack SDK 클라이언트 초기화
+	osClient, err := ossdk.NewClient(&ossdk.OSConfig{
 		AuthURL:         cfg.OpenStackAuthURL,
 		AuthType:        cfg.OpenStackAuthType,
 		Username:        cfg.OpenStackUsername,

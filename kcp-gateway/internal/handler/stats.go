@@ -1,4 +1,4 @@
-// 통계/대시보드 관련 API 핸들러 — OpenStack 다중 서비스 병렬 조회
+// 통계/대시보드 관련 API 핸들러 — OpenStack SDK 다중 서비스 병렬 조회
 package handler
 
 import (
@@ -8,18 +8,29 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 )
 
 // StatsHandler 는 대시보드 통계 관련 API를 처리한다
 type StatsHandler struct {
-	os *openstack.Client
-	db *sql.DB
+	compute  *ossdk.ComputeService
+	net      *ossdk.NetworkService
+	storage  *ossdk.StorageService
+	image    *ossdk.ImageService
+	identity *ossdk.IdentityService
+	db       *sql.DB
 }
 
-// NewStatsHandler 는 OpenStack 클라이언트와 DB를 주입받아 StatsHandler를 생성한다
-func NewStatsHandler(osClient *openstack.Client, db *sql.DB) *StatsHandler {
-	return &StatsHandler{os: osClient, db: db}
+// NewStatsHandler 는 OpenStack SDK 클라이언트와 DB를 주입받아 StatsHandler를 생성한다
+func NewStatsHandler(osClient *ossdk.Client, db *sql.DB) *StatsHandler {
+	return &StatsHandler{
+		compute:  ossdk.NewComputeService(osClient),
+		net:      ossdk.NewNetworkService(osClient),
+		storage:  ossdk.NewStorageService(osClient),
+		image:    ossdk.NewImageService(osClient),
+		identity: ossdk.NewIdentityService(osClient),
+		db:       db,
+	}
 }
 
 // serviceCount 는 각 서비스별 리소스 개수를 저장하는 구조체이다
@@ -30,25 +41,26 @@ type serviceCount struct {
 }
 
 // Dashboard 는 대시보드 통계 데이터를 조회한다.
-// 여러 OpenStack 서비스 API를 병렬 호출하여 리소스 수를 집계한다.
+// 여러 OpenStack SDK 서비스를 병렬 호출하여 리소스 수를 집계한다.
 func (h *StatsHandler) Dashboard(c *gin.Context) {
-	// 병렬 조회할 서비스 목록 정의
-	type query struct {
-		name        string
-		serviceType string
-		path        string
-		countKey    string // JSON 응답에서 배열 키
+	// 병렬 조회할 서비스별 함수 정의
+	type queryFunc struct {
+		name string
+		fn   func() ([]json.RawMessage, error)
 	}
 
-	queries := []query{
-		{name: "servers", serviceType: "compute", path: "/servers", countKey: "servers"},
-		{name: "networks", serviceType: "network", path: "/v2.0/networks", countKey: "networks"},
-		{name: "subnets", serviceType: "network", path: "/v2.0/subnets", countKey: "subnets"},
-		{name: "routers", serviceType: "network", path: "/v2.0/routers", countKey: "routers"},
-		{name: "volumes", serviceType: "volumev3", path: "/volumes", countKey: "volumes"},
-		{name: "images", serviceType: "image", path: "/v2/images", countKey: "images"},
-		{name: "projects", serviceType: "identity", path: "/projects", countKey: "projects"},
-		{name: "users", serviceType: "identity", path: "/users", countKey: "users"},
+	queries := []queryFunc{
+		{name: "servers", fn: h.compute.ListServers},
+		{name: "flavors", fn: h.compute.ListFlavors},
+		{name: "networks", fn: h.net.ListNetworks},
+		{name: "subnets", fn: h.net.ListSubnets},
+		{name: "routers", fn: h.net.ListRouters},
+		{name: "security_groups", fn: h.net.ListSecurityGroups},
+		{name: "volumes", fn: h.storage.ListVolumes},
+		{name: "snapshots", fn: h.storage.ListSnapshots},
+		{name: "images", fn: h.image.ListImages},
+		{name: "projects", fn: h.identity.ListProjects},
+		{name: "users", fn: h.identity.ListUsers},
 	}
 
 	// 병렬 호출을 위한 WaitGroup 및 채널
@@ -57,37 +69,18 @@ func (h *StatsHandler) Dashboard(c *gin.Context) {
 
 	for _, q := range queries {
 		wg.Add(1)
-		go func(q query) {
+		go func(q queryFunc) {
 			defer wg.Done()
 			sc := serviceCount{name: q.name}
 
-			data, statusCode, err := h.os.DoRequest("GET", q.serviceType, q.path, nil)
+			items, err := q.fn()
 			if err != nil {
 				sc.err = err
 				results <- sc
 				return
 			}
 
-			if statusCode >= 400 {
-				// API 오류 시 카운트 0으로 처리
-				results <- sc
-				return
-			}
-
-			// 응답 JSON에서 배열 길이를 추출하여 카운트 계산
-			var parsed map[string]json.RawMessage
-			if err := json.Unmarshal(data, &parsed); err != nil {
-				results <- sc
-				return
-			}
-
-			if raw, ok := parsed[q.countKey]; ok {
-				var items []json.RawMessage
-				if err := json.Unmarshal(raw, &items); err == nil {
-					sc.count = len(items)
-				}
-			}
-
+			sc.count = len(items)
 			results <- sc
 		}(q)
 	}

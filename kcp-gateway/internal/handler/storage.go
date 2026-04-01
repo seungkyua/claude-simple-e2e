@@ -1,27 +1,40 @@
-// 스토리지(볼륨, 스냅샷) 관련 API 핸들러 — Cinder v3 API 연동
+// 스토리지(볼륨, 스냅샷) 관련 API 핸들러 — OpenStack SDK를 통한 Cinder v3 API 연동
 package handler
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 )
 
 // StorageHandler 는 볼륨 및 스냅샷 관련 API를 처리한다
 type StorageHandler struct {
-	os *openstack.Client
+	storage *ossdk.StorageService
 }
 
-// NewStorageHandler 는 OpenStack 클라이언트를 주입받아 StorageHandler를 생성한다
-func NewStorageHandler(osClient *openstack.Client) *StorageHandler {
-	return &StorageHandler{os: osClient}
+// NewStorageHandler 는 OpenStack SDK 클라이언트를 주입받아 StorageHandler를 생성한다
+func NewStorageHandler(osClient *ossdk.Client) *StorageHandler {
+	return &StorageHandler{storage: ossdk.NewStorageService(osClient)}
 }
 
 // ListVolumes 는 볼륨 목록을 조회한다 (Cinder GET /volumes/detail)
 func (h *StorageHandler) ListVolumes(c *gin.Context) {
-	data, status, err := h.os.DoRequest("GET", "volumev3", "/volumes/detail", nil)
-	forwardOSListResponse(c, data, status, err, "volumes")
+	items, err := h.storage.ListVolumes()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, kcpListResponse{
+		Items: items,
+		Pagination: kcpPagination{
+			Page:  1,
+			Size:  len(items),
+			Total: len(items),
+		},
+	})
 }
 
 // createVolumeRequest 는 볼륨 생성 요청 본문이다
@@ -42,25 +55,34 @@ func (h *StorageHandler) CreateVolume(c *gin.Context) {
 		return
 	}
 
-	// Cinder API 요청 본문 구성
+	// SDK에 전달할 볼륨 본문 구성
 	body := map[string]interface{}{
-		"volume": map[string]interface{}{
-			"name":        req.Name,
-			"size":        req.Size,
-			"description": req.Description,
-			"volume_type": req.VolumeType,
-		},
+		"name":        req.Name,
+		"size":        req.Size,
+		"description": req.Description,
+		"volume_type": req.VolumeType,
 	}
 
-	data, status, err := h.os.DoRequest("POST", "volumev3", "/volumes", body)
-	forwardOSSingleResponse(c, data, status, err, "volume")
+	result, err := h.storage.CreateVolume(body)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteVolume 은 지정된 볼륨을 삭제한다 (Cinder DELETE /volumes/:id)
 func (h *StorageHandler) DeleteVolume(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.os.DoRequest("DELETE", "volumev3", "/volumes/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.storage.DeleteVolume(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // attachVolumeRequest 는 볼륨 연결 요청 본문이다
@@ -80,34 +102,46 @@ func (h *StorageHandler) AttachVolume(c *gin.Context) {
 		return
 	}
 
-	// Cinder os-attach 액션 요청
-	body := map[string]interface{}{
-		"os-attach": map[string]interface{}{
-			"instance_uuid": req.ServerID,
-		},
+	// SDK의 AttachVolume 호출 (device는 자동 할당)
+	if err := h.storage.AttachVolume(id, req.ServerID, ""); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
 	}
-
-	data, status, err := h.os.DoRequest("POST", "volumev3", "/volumes/"+id+"/action", body)
-	forwardOSResponse(c, data, status, err)
+	c.Status(http.StatusAccepted)
 }
 
 // DetachVolume 은 서버에서 볼륨을 분리한다 (Cinder POST /volumes/:id/action — os-detach)
 func (h *StorageHandler) DetachVolume(c *gin.Context) {
 	id := c.Param("id")
 
-	// Cinder os-detach 액션 요청
-	body := map[string]interface{}{
-		"os-detach": map[string]interface{}{},
+	if err := h.storage.DetachVolume(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
 	}
-
-	data, status, err := h.os.DoRequest("POST", "volumev3", "/volumes/"+id+"/action", body)
-	forwardOSResponse(c, data, status, err)
+	c.Status(http.StatusAccepted)
 }
 
 // ListSnapshots 는 스냅샷 목록을 조회한다 (Cinder GET /snapshots/detail)
 func (h *StorageHandler) ListSnapshots(c *gin.Context) {
-	data, status, err := h.os.DoRequest("GET", "volumev3", "/snapshots/detail", nil)
-	forwardOSListResponse(c, data, status, err, "snapshots")
+	items, err := h.storage.ListSnapshots()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, kcpListResponse{
+		Items: items,
+		Pagination: kcpPagination{
+			Page:  1,
+			Size:  len(items),
+			Total: len(items),
+		},
+	})
 }
 
 // createSnapshotRequest 는 스냅샷 생성 요청 본문이다
@@ -127,22 +161,31 @@ func (h *StorageHandler) CreateSnapshot(c *gin.Context) {
 		return
 	}
 
-	// Cinder 스냅샷 생성 요청 본문
+	// SDK에 전달할 스냅샷 본문 구성
 	body := map[string]interface{}{
-		"snapshot": map[string]interface{}{
-			"name":        req.Name,
-			"volume_id":   req.VolumeID,
-			"description": req.Description,
-		},
+		"name":        req.Name,
+		"volume_id":   req.VolumeID,
+		"description": req.Description,
 	}
 
-	data, status, err := h.os.DoRequest("POST", "volumev3", "/snapshots", body)
-	forwardOSSingleResponse(c, data, status, err, "snapshot")
+	result, err := h.storage.CreateSnapshot(body)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteSnapshot 은 지정된 스냅샷을 삭제한다 (Cinder DELETE /snapshots/:id)
 func (h *StorageHandler) DeleteSnapshot(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.os.DoRequest("DELETE", "volumev3", "/snapshots/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.storage.DeleteSnapshot(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

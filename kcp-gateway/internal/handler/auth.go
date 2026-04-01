@@ -12,6 +12,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const (
+	// DefaultJWTExpiry 는 JWT 만료 시간 파싱 실패 시 사용하는 기본값이다
+	DefaultJWTExpiry = 1 * time.Hour
+)
+
 // AuthHandler 는 인증 관련 API를 처리한다
 type AuthHandler struct {
 	db  *sql.DB
@@ -64,8 +69,12 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// JWT 토큰 생성 (15분 만료)
-	expiresAt := time.Now().Add(15 * time.Minute)
+	// JWT 토큰 생성 (config의 jwt.expiry 값 사용)
+	expiry, err := time.ParseDuration(h.cfg.JWTExpiry)
+	if err != nil {
+		expiry = DefaultJWTExpiry
+	}
+	expiresAt := time.Now().Add(expiry)
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":      userID,
 		"username": username,

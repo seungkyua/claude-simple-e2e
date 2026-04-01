@@ -80,6 +80,62 @@ func formatTable(headers []string, rows [][]string) {
 	fmt.Println(sep)
 }
 
+// formatDetail 은 Field/Value 쌍을 세로 테이블로 출력한다.
+// OpenStack CLI의 show 명령과 동일한 형식이다.
+// 예:
+// +----------+----------------------------+
+// | Field    | Value                      |
+// +----------+----------------------------+
+// | id       | abc-123                    |
+// | name     | my-server                  |
+// +----------+----------------------------+
+func formatDetail(fields [][]string) {
+	if len(fields) == 0 {
+		return
+	}
+
+	// Field, Value 컬럼의 최대 폭 계산
+	fieldWidth := displayWidth("Field")
+	valueWidth := displayWidth("Value")
+	for _, f := range fields {
+		fw := displayWidth(f[0])
+		if fw > fieldWidth {
+			fieldWidth = fw
+		}
+		if len(f) > 1 {
+			vw := displayWidth(f[1])
+			if vw > valueWidth {
+				valueWidth = vw
+			}
+		}
+	}
+
+	sep := "+" + strings.Repeat("-", fieldWidth+2) + "+" + strings.Repeat("-", valueWidth+2) + "+"
+
+	fmt.Println(sep)
+	fmt.Printf("| %s | %s |\n", padRight("Field", fieldWidth), padRight("Value", valueWidth))
+	fmt.Println(sep)
+	for _, f := range fields {
+		field := f[0]
+		value := ""
+		if len(f) > 1 {
+			value = f[1]
+		}
+		fmt.Printf("| %s | %s |\n", padRight(field, fieldWidth), padRight(value, valueWidth))
+	}
+	fmt.Println(sep)
+}
+
+// formatDetailOutput 은 format 플래그에 따라 상세 출력을 분기한다
+func formatDetailOutput(format string, fields [][]string, data interface{}) {
+	switch format {
+	case "json":
+		formatJSON(data)
+	default:
+		formatDetail(fields)
+	}
+}
+
 // formatJSON 은 데이터를 JSON 형식으로 출력한다
 func formatJSON(data interface{}) {
 	enc := json.NewEncoder(os.Stdout)

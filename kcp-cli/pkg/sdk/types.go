@@ -10,15 +10,45 @@ import (
 
 // Server 는 OpenStack Nova VM 인스턴스를 나타낸다
 type Server struct {
-	ID        string            `json:"id"`
-	Name      string            `json:"name"`
-	Status    string            `json:"status"`
-	Flavor    FlavorRef         `json:"flavor"`
-	Image     ImageRef          `json:"image"`
-	Addresses map[string][]Addr `json:"addresses"`
-	Networks  string            `json:"networks,omitempty"` // Gateway가 enrichment한 네트워크 요약 문자열
-	Created   time.Time         `json:"created"`
-	Updated   time.Time         `json:"updated"`
+	ID                 string            `json:"id"`
+	Name               string            `json:"name"`
+	Status             string            `json:"status"`
+	Flavor             FlavorRef         `json:"flavor"`
+	Image              ImageRef          `json:"image"`
+	Addresses          map[string][]Addr `json:"addresses"`
+	Networks           string            `json:"networks,omitempty"`
+	Created            time.Time         `json:"created"`
+	Updated            time.Time         `json:"updated"`
+	ProjectID          string            `json:"tenant_id"`
+	UserID             string            `json:"user_id"`
+	KeyName            string            `json:"key_name"`
+	HostID             string            `json:"hostId"`
+	AvailabilityZone   string            `json:"OS-EXT-AZ:availability_zone"`
+	PowerState         int               `json:"OS-EXT-STS:power_state"`
+	TaskState          string            `json:"OS-EXT-STS:task_state"`
+	VMState            string            `json:"OS-EXT-STS:vm_state"`
+	DiskConfig         string            `json:"OS-DCF:diskConfig"`
+	LaunchedAt         string            `json:"OS-SRV-USG:launched_at"`
+	TerminatedAt       string            `json:"OS-SRV-USG:terminated_at"`
+	Host               string            `json:"OS-EXT-SRV-ATTR:host"`
+	InstanceName       string            `json:"OS-EXT-SRV-ATTR:instance_name"`
+	HypervisorHostname string            `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+	SecurityGroups     []SecurityGroupRef `json:"security_groups"`
+	VolumesAttached    []VolumeAttachRef  `json:"os-extended-volumes:volumes_attached"`
+	Description        string            `json:"description"`
+	Locked             bool              `json:"locked"`
+	ConfigDrive        string            `json:"config_drive"`
+	Progress           int               `json:"progress"`
+}
+
+// SecurityGroupRef 는 서버에 할당된 보안그룹 참조이다
+type SecurityGroupRef struct {
+	Name string `json:"name"`
+}
+
+// VolumeAttachRef 는 서버에 연결된 볼륨 참조이다
+type VolumeAttachRef struct {
+	ID string `json:"id"`
 }
 
 // FormatNetworks 는 서버의 네트워크 주소를 OpenStack CLI 형식으로 포맷한다

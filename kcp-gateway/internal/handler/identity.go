@@ -1,27 +1,40 @@
-// 인증/인가(프로젝트, 사용자, 역할) 관련 API 핸들러 — Keystone v3 API 연동
+// 인증/인가(프로젝트, 사용자, 역할) 관련 API 핸들러 — OpenStack SDK를 통한 Keystone v3 API 연동
 package handler
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 )
 
 // IdentityHandler 는 프로젝트, 사용자, 역할 관련 API를 처리한다
 type IdentityHandler struct {
-	os *openstack.Client
+	identity *ossdk.IdentityService
 }
 
-// NewIdentityHandler 는 OpenStack 클라이언트를 주입받아 IdentityHandler를 생성한다
-func NewIdentityHandler(osClient *openstack.Client) *IdentityHandler {
-	return &IdentityHandler{os: osClient}
+// NewIdentityHandler 는 OpenStack SDK 클라이언트를 주입받아 IdentityHandler를 생성한다
+func NewIdentityHandler(osClient *ossdk.Client) *IdentityHandler {
+	return &IdentityHandler{identity: ossdk.NewIdentityService(osClient)}
 }
 
 // ListProjects 는 프로젝트 목록을 조회한다 (Keystone GET /projects)
 func (h *IdentityHandler) ListProjects(c *gin.Context) {
-	data, status, err := h.os.DoRequest("GET", "identity", "/v3/projects", nil)
-	forwardOSListResponse(c, data, status, err, "projects")
+	items, err := h.identity.ListProjects()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, kcpListResponse{
+		Items: items,
+		Pagination: kcpPagination{
+			Page:  1,
+			Size:  len(items),
+			Total: len(items),
+		},
+	})
 }
 
 // createProjectRequest 는 프로젝트 생성 요청 본문이다
@@ -42,7 +55,7 @@ func (h *IdentityHandler) CreateProject(c *gin.Context) {
 		return
 	}
 
-	// Keystone 프로젝트 생성 요청 본문
+	// SDK에 전달할 프로젝트 본문 구성
 	project := map[string]interface{}{
 		"name":        req.Name,
 		"description": req.Description,
@@ -54,22 +67,45 @@ func (h *IdentityHandler) CreateProject(c *gin.Context) {
 		project["enabled"] = *req.Enabled
 	}
 
-	body := map[string]interface{}{"project": project}
-	data, status, err := h.os.DoRequest("POST", "identity", "/v3/projects", body)
-	forwardOSSingleResponse(c, data, status, err, "project")
+	result, err := h.identity.CreateProject(project)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteProject 는 지정된 프로젝트를 삭제한다 (Keystone DELETE /projects/:id)
 func (h *IdentityHandler) DeleteProject(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.os.DoRequest("DELETE", "identity", "/projects/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.identity.DeleteProject(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ListUsers 는 사용자 목록을 조회한다 (Keystone GET /users)
 func (h *IdentityHandler) ListUsers(c *gin.Context) {
-	data, status, err := h.os.DoRequest("GET", "identity", "/v3/users", nil)
-	forwardOSListResponse(c, data, status, err, "users")
+	items, err := h.identity.ListUsers()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.JSON(http.StatusOK, kcpListResponse{
+		Items: items,
+		Pagination: kcpPagination{
+			Page:  1,
+			Size:  len(items),
+			Total: len(items),
+		},
+	})
 }
 
 // createUserRequest 는 사용자 생성 요청 본문이다
@@ -91,7 +127,7 @@ func (h *IdentityHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	// Keystone 사용자 생성 요청 본문
+	// SDK에 전달할 사용자 본문 구성
 	user := map[string]interface{}{
 		"name":     req.Name,
 		"password": req.Password,
@@ -106,16 +142,26 @@ func (h *IdentityHandler) CreateUser(c *gin.Context) {
 		user["enabled"] = *req.Enabled
 	}
 
-	body := map[string]interface{}{"user": user}
-	data, status, err := h.os.DoRequest("POST", "identity", "/v3/users", body)
-	forwardOSSingleResponse(c, data, status, err, "user")
+	result, err := h.identity.CreateUser(user)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteUser 는 지정된 사용자를 삭제한다 (Keystone DELETE /users/:id)
 func (h *IdentityHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.os.DoRequest("DELETE", "identity", "/users/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.identity.DeleteUser(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // assignRoleRequest 는 역할 할당/회수 요청 본문이다
@@ -136,9 +182,13 @@ func (h *IdentityHandler) AssignRole(c *gin.Context) {
 		return
 	}
 
-	path := "/v3/projects/" + req.ProjectID + "/users/" + req.UserID + "/roles/" + req.RoleID
-	data, status, err := h.os.DoRequest("PUT", "identity", path, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.identity.AssignRole(req.ProjectID, req.UserID, req.RoleID); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // RevokeRole 은 사용자에게서 역할을 회수한다
@@ -152,7 +202,11 @@ func (h *IdentityHandler) RevokeRole(c *gin.Context) {
 		return
 	}
 
-	path := "/v3/projects/" + req.ProjectID + "/users/" + req.UserID + "/roles/" + req.RoleID
-	data, status, err := h.os.DoRequest("DELETE", "identity", path, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.identity.RevokeRole(req.ProjectID, req.UserID, req.RoleID); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

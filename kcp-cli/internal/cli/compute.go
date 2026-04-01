@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/kcp-cli/kcp-cli/internal/config"
 	"github.com/kcp-cli/kcp-cli/pkg/sdk"
@@ -141,7 +142,7 @@ func runVMList(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// openstack server show 동일 출력
+// openstack server show 동일 출력 (Field/Value 세로 테이블)
 func runVMShow(_ *cobra.Command, args []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
@@ -161,14 +162,87 @@ func runVMShow(_ *cobra.Command, args []string) error {
 	if imageName == "" {
 		imageName = s.Image.ID
 	}
+	imageDisplay := fmt.Sprintf("%s (%s)", imageName, s.Image.ID)
+
 	networks := s.Networks
 	if networks == "" {
 		networks = s.FormatNetworks()
 	}
 
-	headers := []string{"ID", "Name", "Status", "Networks", "Image", "Flavor"}
-	rows := [][]string{{s.ID, s.Name, s.Status, networks, imageName, flavorName}}
-	formatOutput(outputFormat, headers, rows, s)
+	// 보안그룹 포맷
+	var sgNames []string
+	for _, sg := range s.SecurityGroups {
+		sgNames = append(sgNames, fmt.Sprintf("name='%s'", sg.Name))
+	}
+	sgDisplay := strings.Join(sgNames, ", ")
+
+	// 볼륨 포맷
+	var volIDs []string
+	for _, v := range s.VolumesAttached {
+		volIDs = append(volIDs, v.ID)
+	}
+	volDisplay := strings.Join(volIDs, ", ")
+
+	// power state 변환
+	powerState := "NOSTATE"
+	switch s.PowerState {
+	case 1:
+		powerState = "Running"
+	case 3:
+		powerState = "Paused"
+	case 4:
+		powerState = "Shutdown"
+	case 6:
+		powerState = "Crashed"
+	case 7:
+		powerState = "Suspended"
+	}
+
+	taskState := s.TaskState
+	if taskState == "" {
+		taskState = "None"
+	}
+	description := s.Description
+	if description == "" {
+		description = "None"
+	}
+	terminatedAt := s.TerminatedAt
+	if terminatedAt == "" {
+		terminatedAt = "None"
+	}
+
+	fields := [][]string{
+		{"OS-DCF:diskConfig", s.DiskConfig},
+		{"OS-EXT-AZ:availability_zone", s.AvailabilityZone},
+		{"OS-EXT-SRV-ATTR:host", s.Host},
+		{"OS-EXT-SRV-ATTR:hypervisor_hostname", s.HypervisorHostname},
+		{"OS-EXT-SRV-ATTR:instance_name", s.InstanceName},
+		{"OS-EXT-STS:power_state", powerState},
+		{"OS-EXT-STS:task_state", taskState},
+		{"OS-EXT-STS:vm_state", s.VMState},
+		{"OS-SRV-USG:launched_at", s.LaunchedAt},
+		{"OS-SRV-USG:terminated_at", terminatedAt},
+		{"addresses", networks},
+		{"config_drive", s.ConfigDrive},
+		{"created", s.Created.Format("2006-01-02T15:04:05Z")},
+		{"description", description},
+		{"flavor", flavorName},
+		{"hostId", s.HostID},
+		{"id", s.ID},
+		{"image", imageDisplay},
+		{"key_name", s.KeyName},
+		{"locked", fmt.Sprintf("%v", s.Locked)},
+		{"name", s.Name},
+		{"progress", fmt.Sprintf("%d", s.Progress)},
+		{"project_id", s.ProjectID},
+		{"security_groups", sgDisplay},
+		{"status", s.Status},
+		{"updated", s.Updated.Format("2006-01-02T15:04:05Z")},
+		{"user_id", s.UserID},
+		{"volumes_attached", volDisplay},
+	}
+
+	formatDetailOutput(outputFormat, fields, s)
 	return nil
 }
 

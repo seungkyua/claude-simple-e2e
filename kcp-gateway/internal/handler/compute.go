@@ -1,5 +1,5 @@
 // 컴퓨트(서버/인스턴스) 관련 API 핸들러
-// OpenStack Nova API와 실제 통신하여 서버, 플레이버 CRUD를 수행한다.
+// OpenStack SDK를 통해 Nova API와 통신하여 서버, 플레이버 CRUD를 수행한다.
 // 서버 목록/상세 응답에 flavor_name, image_name을 자동으로 enrichment한다.
 package handler
 
@@ -11,40 +11,56 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	"github.com/kcp-cli/kcp-gateway/internal/openstack"
+	ossdk "github.com/kcp-cli/kcp-cli/pkg/sdk/openstack"
 )
 
 // ComputeHandler 는 컴퓨트(서버, 플레이버) 관련 API를 처리한다
 type ComputeHandler struct {
-	osClient *openstack.Client
+	compute *ossdk.ComputeService
+	image   *ossdk.ImageService
 }
 
-// NewComputeHandler 는 OpenStack 클라이언트를 주입받아 ComputeHandler를 생성한다
-func NewComputeHandler(osClient *openstack.Client) *ComputeHandler {
-	return &ComputeHandler{osClient: osClient}
+// NewComputeHandler 는 OpenStack SDK 클라이언트를 주입받아 ComputeHandler를 생성한다
+func NewComputeHandler(osClient *ossdk.Client) *ComputeHandler {
+	return &ComputeHandler{
+		compute: ossdk.NewComputeService(osClient),
+		image:   ossdk.NewImageService(osClient),
+	}
 }
 
-// fetchNameMap 은 OpenStack API에서 ID→Name 매핑을 구축한다
-// serviceType: "compute" 또는 "image", path: API 경로, rootKey: 응답 루트 키
-func (h *ComputeHandler) fetchNameMap(serviceType, path, rootKey string) map[string]string {
+// fetchFlavorNameMap 은 Flavor ID→Name 매핑을 구축한다
+func (h *ComputeHandler) fetchFlavorNameMap() map[string]string {
 	m := make(map[string]string)
-	data, status, err := h.osClient.DoRequest("GET", serviceType, path, nil)
-	if err != nil || status >= 400 {
+	items, err := h.compute.ListFlavors()
+	if err != nil {
 		return m
 	}
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) != nil {
+	for _, raw := range items {
+		var item map[string]interface{}
+		if json.Unmarshal(raw, &item) != nil {
+			continue
+		}
+		id, _ := item["id"].(string)
+		name, _ := item["name"].(string)
+		if id != "" && name != "" {
+			m[id] = name
+		}
+	}
+	return m
+}
+
+// fetchImageNameMap 은 Image ID→Name 매핑을 구축한다
+func (h *ComputeHandler) fetchImageNameMap() map[string]string {
+	m := make(map[string]string)
+	items, err := h.image.ListImages()
+	if err != nil {
 		return m
 	}
-	itemsRaw, ok := raw[rootKey]
-	if !ok {
-		return m
-	}
-	var items []map[string]interface{}
-	if json.Unmarshal(itemsRaw, &items) != nil {
-		return m
-	}
-	for _, item := range items {
+	for _, raw := range items {
+		var item map[string]interface{}
+		if json.Unmarshal(raw, &item) != nil {
+			continue
+		}
 		id, _ := item["id"].(string)
 		name, _ := item["name"].(string)
 		if id != "" && name != "" {
@@ -62,11 +78,11 @@ func (h *ComputeHandler) enrichServers(items []json.RawMessage) []json.RawMessag
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		flavorMap = h.fetchNameMap("compute", "/flavors/detail", "flavors")
+		flavorMap = h.fetchFlavorNameMap()
 	}()
 	go func() {
 		defer wg.Done()
-		imageMap = h.fetchNameMap("image", "/v2/images", "images")
+		imageMap = h.fetchImageNameMap()
 	}()
 	wg.Wait()
 
@@ -130,26 +146,11 @@ func (h *ComputeHandler) enrichServers(items []json.RawMessage) []json.RawMessag
 // ListServers 는 서버 목록을 조회한다 (Nova /servers/detail)
 // Gateway에서 flavor_name, image_name, networks를 자동 enrichment한다
 func (h *ComputeHandler) ListServers(c *gin.Context) {
-	data, status, err := h.osClient.DoRequest("GET", "compute", "/servers/detail", nil)
-	if err != nil || status >= 400 {
-		forwardOSResponse(c, data, status, err)
-		return
-	}
-
-	// 서버 목록 파싱
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) != nil {
-		forwardOSResponse(c, data, status, nil)
-		return
-	}
-	itemsRaw, ok := raw["servers"]
-	if !ok {
-		forwardOSResponse(c, data, status, nil)
-		return
-	}
-	var items []json.RawMessage
-	if json.Unmarshal(itemsRaw, &items) != nil {
-		forwardOSResponse(c, data, status, nil)
+	items, err := h.compute.ListServers()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
 		return
 	}
 
@@ -169,30 +170,21 @@ func (h *ComputeHandler) ListServers(c *gin.Context) {
 // GetServer 는 특정 서버의 상세 정보를 조회한다 (enrichment 포함)
 func (h *ComputeHandler) GetServer(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.osClient.DoRequest("GET", "compute", "/servers/"+id, nil)
-	if err != nil || status >= 400 {
-		forwardOSResponse(c, data, status, err)
+	serverRaw, err := h.compute.GetServer(id)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
 		return
 	}
 
-	// 단일 서버 파싱 후 enrichment
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) != nil {
-		forwardOSResponse(c, data, status, nil)
-		return
-	}
-	serverRaw, ok := raw["server"]
-	if !ok {
-		forwardOSResponse(c, data, status, nil)
-		return
-	}
-
+	// 단일 서버 enrichment
 	enriched := h.enrichServers([]json.RawMessage{serverRaw})
 	if len(enriched) > 0 {
 		c.Data(http.StatusOK, "application/json; charset=utf-8", enriched[0])
 		return
 	}
-	c.Data(status, "application/json; charset=utf-8", serverRaw)
+	c.Data(http.StatusOK, "application/json; charset=utf-8", serverRaw)
 }
 
 // CreateServer 는 새로운 서버를 생성한다 (Nova 서버 생성 요청)
@@ -205,19 +197,26 @@ func (h *ComputeHandler) CreateServer(c *gin.Context) {
 		return
 	}
 
-	novaReq := map[string]interface{}{
-		"server": reqBody,
+	result, err := h.compute.CreateServer(reqBody)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
 	}
-
-	data, status, err := h.osClient.DoRequest("POST", "compute", "/servers", novaReq)
-	forwardOSSingleResponse(c, data, status, err, "server")
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteServer 는 지정된 서버를 삭제한다
 func (h *ComputeHandler) DeleteServer(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.osClient.DoRequest("DELETE", "compute", "/servers/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.compute.DeleteServer(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ServerAction 은 서버에 대한 액션(시작, 중지, 재부팅 등)을 수행한다
@@ -234,7 +233,7 @@ func (h *ComputeHandler) ServerAction(c *gin.Context) {
 		return
 	}
 
-	var novaAction interface{}
+	var novaAction map[string]interface{}
 	switch reqBody.Action {
 	case "start":
 		novaAction = map[string]interface{}{"os-start": nil}
@@ -255,14 +254,33 @@ func (h *ComputeHandler) ServerAction(c *gin.Context) {
 		return
 	}
 
-	data, status, err := h.osClient.DoRequest("POST", "compute", "/servers/"+id+"/action", novaAction)
-	forwardOSResponse(c, data, status, err)
+	if err := h.compute.ServerAction(id, novaAction); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusAccepted)
 }
 
 // ListFlavors 는 플레이버(인스턴스 사양) 목록을 조회한다
 func (h *ComputeHandler) ListFlavors(c *gin.Context) {
-	data, status, err := h.osClient.DoRequest("GET", "compute", "/flavors/detail", nil)
-	forwardOSListResponse(c, data, status, err, "flavors")
+	items, err := h.compute.ListFlavors()
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, kcpListResponse{
+		Items: items,
+		Pagination: kcpPagination{
+			Page:  1,
+			Size:  len(items),
+			Total: len(items),
+		},
+	})
 }
 
 // CreateFlavor 는 새로운 플레이버를 생성한다
@@ -275,17 +293,24 @@ func (h *ComputeHandler) CreateFlavor(c *gin.Context) {
 		return
 	}
 
-	novaReq := map[string]interface{}{
-		"flavor": reqBody,
+	result, err := h.compute.CreateFlavor(reqBody)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
 	}
-
-	data, status, err := h.osClient.DoRequest("POST", "compute", "/flavors", novaReq)
-	forwardOSSingleResponse(c, data, status, err, "flavor")
+	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
 }
 
 // DeleteFlavor 는 지정된 플레이버를 삭제한다
 func (h *ComputeHandler) DeleteFlavor(c *gin.Context) {
 	id := c.Param("id")
-	data, status, err := h.osClient.DoRequest("DELETE", "compute", "/flavors/"+id, nil)
-	forwardOSResponse(c, data, status, err)
+	if err := h.compute.DeleteFlavor(id); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
+		})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

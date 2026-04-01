@@ -323,9 +323,9 @@ func TestDoRequest(t *testing.T) {
 // TestExtractErrorMessage 는 에러 응답에서 의미 있는 메시지를 추출하는지 검증한다
 func TestExtractErrorMessage(t *testing.T) {
 	tests := []struct {
-		name       string
-		body       string
-		statusCode int
+		name         string
+		body         string
+		statusCode   int
 		wantContains string
 	}{
 		{
@@ -393,5 +393,67 @@ func TestNewClientLazyAuth(t *testing.T) {
 	}
 	if client == nil {
 		t.Fatal("인증 실패 시에도 클라이언트가 반환되어야 합니다 (지연 인증)")
+	}
+}
+
+// TestExtractList 는 JSON 응답에서 배열을 올바르게 추출하는지 검증한다
+func TestExtractList(t *testing.T) {
+	data := []byte(`{"servers":[{"id":"s1"},{"id":"s2"}]}`)
+	items, err := extractList(data, "servers")
+	if err != nil {
+		t.Fatalf("extractList 실패: %v", err)
+	}
+	if len(items) != 2 {
+		t.Errorf("items count = %d, want 2", len(items))
+	}
+
+	// 존재하지 않는 키
+	_, err = extractList(data, "nonexistent")
+	if err == nil {
+		t.Error("존재하지 않는 키에 대해 에러가 반환되어야 합니다")
+	}
+}
+
+// TestExtractSingle 은 JSON 응답에서 단일 객체를 올바르게 추출하는지 검증한다
+func TestExtractSingle(t *testing.T) {
+	data := []byte(`{"server":{"id":"s1","name":"test"}}`)
+	item, err := extractSingle(data, "server")
+	if err != nil {
+		t.Fatalf("extractSingle 실패: %v", err)
+	}
+
+	var server map[string]string
+	json.Unmarshal(item, &server)
+	if server["id"] != "s1" {
+		t.Errorf("server id = %s, want s1", server["id"])
+	}
+
+	// 존재하지 않는 키
+	_, err = extractSingle(data, "nonexistent")
+	if err == nil {
+		t.Error("존재하지 않는 키에 대해 에러가 반환되어야 합니다")
+	}
+}
+
+// TestCheckStatusError 는 HTTP 상태 코드에 따른 에러 반환을 검증한다
+func TestCheckStatusError(t *testing.T) {
+	// 정상 상태 코드
+	err := checkStatusError([]byte("{}"), 200, "테스트")
+	if err != nil {
+		t.Errorf("200 상태에서 에러가 반환되면 안 됩니다: %v", err)
+	}
+
+	err = checkStatusError([]byte("{}"), 204, "테스트")
+	if err != nil {
+		t.Errorf("204 상태에서 에러가 반환되면 안 됩니다: %v", err)
+	}
+
+	// 에러 상태 코드
+	err = checkStatusError([]byte(`{"error":{"message":"Not Found","code":404}}`), 404, "리소스 조회")
+	if err == nil {
+		t.Error("404 상태에서 에러가 반환되어야 합니다")
+	}
+	if !strings.Contains(err.Error(), "리소스 조회 실패") {
+		t.Errorf("에러 메시지에 작업명이 포함되어야 합니다: %v", err)
 	}
 }

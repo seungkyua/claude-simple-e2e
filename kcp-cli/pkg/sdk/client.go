@@ -12,6 +12,15 @@ import (
 	"time"
 )
 
+const (
+	// DefaultGatewayTimeout 은 Gateway API 요청의 기본 타임아웃이다
+	DefaultGatewayTimeout = 30 * time.Second
+	// DefaultMaxRetries 는 기본 최대 재시도 횟수이다
+	DefaultMaxRetries = 3
+	// DefaultUserAgent 는 기본 User-Agent 헤더 값이다
+	DefaultUserAgent = "kcp-cli/1.0"
+)
+
 // Client 는 Gateway API와 통신하는 HTTP 클라이언트이다
 type Client struct {
 	baseURL    string
@@ -49,10 +58,10 @@ func NewClient(baseURL string, opts ...ClientOption) *Client {
 	c := &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: DefaultGatewayTimeout,
 		},
-		userAgent:  "kcp-cli/1.0",
-		maxRetries: 3,
+		userAgent:  DefaultUserAgent,
+		maxRetries: DefaultMaxRetries,
 	}
 	for _, opt := range opts {
 		opt(c)

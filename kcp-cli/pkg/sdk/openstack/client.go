@@ -1,4 +1,4 @@
-// Package openstack 는 OpenStack API와 실제 통신하는 클라이언트를 제공한다.
+// Package openstack 는 OpenStack API와 실제 통신하는 재사용 가능한 SDK 클라이언트를 제공한다.
 // Keystone v3 인증을 통해 토큰을 발급받고, 각 서비스 엔드포인트를 조회한다.
 package openstack
 
@@ -12,6 +12,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	// DefaultHTTPTimeout 은 HTTP 요청의 기본 타임아웃이다
+	DefaultHTTPTimeout = 30 * time.Second
+	// TokenRefreshThreshold 은 토큰 만료 전 자동 갱신 임계값이다
+	TokenRefreshThreshold = 5 * time.Minute
 )
 
 // OSConfig 는 OpenStack 연결 설정이다 (openrc 호환)
@@ -71,7 +78,7 @@ func NewClient(cfg *OSConfig) (*Client, error) {
 	c := &Client{
 		config: cfg,
 		httpClient: &http.Client{
-			Timeout:   30 * time.Second,
+			Timeout:   DefaultHTTPTimeout,
 			Transport: transport,
 		},
 	}
@@ -151,7 +158,7 @@ func (c *Client) GetToken() (string, error) {
 	c.mu.RUnlock()
 
 	// 토큰이 없거나 만료 5분 전이면 재인증
-	if auth == nil || time.Until(auth.ExpiresAt) < 5*time.Minute {
+	if auth == nil || time.Until(auth.ExpiresAt) < TokenRefreshThreshold {
 		if err := c.Authenticate(); err != nil {
 			return "", err
 		}
@@ -361,13 +368,19 @@ func extractErrorMessage(body []byte, statusCode int) string {
 
 // normalizeAuthURL 은 Keystone Auth URL을 정규화한다.
 // /v3가 포함되어 있지 않으면 자동으로 추가한다.
-// 예: "http://host/identity"     → "http://host/identity/v3"
-//     "http://host:5000/v3"      → "http://host:5000/v3" (변경 없음)
-//     "http://host/identity/v3/" → "http://host/identity/v3" (trailing slash 제거)
 func normalizeAuthURL(authURL string) string {
 	url := strings.TrimRight(authURL, "/")
 	if strings.HasSuffix(url, "/v3") {
 		return url
 	}
 	return url + "/v3"
+}
+
+// checkStatusError 는 HTTP 상태 코드가 에러 범위(>= 400)인 경우 에러를 반환한다
+func checkStatusError(data []byte, statusCode int, operation string) error {
+	if statusCode >= 400 {
+		errMsg := extractErrorMessage(data, statusCode)
+		return fmt.Errorf("%s 실패 (HTTP %d): %s", operation, statusCode, errMsg)
+	}
+	return nil
 }
