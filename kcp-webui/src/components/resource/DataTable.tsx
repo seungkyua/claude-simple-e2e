@@ -16,6 +16,7 @@ interface DataTableProps<T> {
   pageSize?: number
   onPageChange?: (page: number) => void
   onDelete?: (item: T) => void
+  onRowClick?: (item: T) => void
   idKey?: string
 }
 
@@ -27,6 +28,7 @@ export default function DataTable<T extends Record<string, unknown>>({
   pageSize = 20,
   onPageChange,
   onDelete,
+  onRowClick,
   idKey = 'id',
 }: DataTableProps<T>) {
   const [search, setSearch] = useState('')
@@ -53,7 +55,11 @@ export default function DataTable<T extends Record<string, unknown>>({
           </thead>
           <tbody className="divide-y divide-gray-800">
             {data.map((item, i) => (
-              <tr key={String(item[idKey] ?? i)} className="hover:bg-gray-900">
+              <tr
+                key={String(item[idKey] ?? i)}
+                className={`hover:bg-gray-900 ${onRowClick ? 'cursor-pointer' : ''}`}
+                onClick={() => onRowClick?.(item)}
+              >
                 {columns.map((col) => (
                   <td key={col.key} className="px-4 py-3">
                     {col.render ? col.render(item) : String(item[col.key] ?? '')}
