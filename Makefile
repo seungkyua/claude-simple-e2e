@@ -39,9 +39,11 @@ clean:
 	cd kcp-cli && go clean
 	cd kcp-gateway && go clean
 
-# Gateway 실행
+# Gateway 실행 (CONFIG 변수로 설정 파일 경로 지정 가능)
+# 사용법: make run-gateway
+#         make run-gateway CONFIG=/path/to/config.yaml
 run-gateway:
-	cd kcp-gateway && go run ./cmd/server/
+	cd kcp-gateway && go run ./cmd/server/ $(if $(CONFIG),--config $(CONFIG),)
 
 # WebUI 개발 서버
 run-webui:

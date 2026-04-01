@@ -142,6 +142,8 @@ vite.config.ts.timestamp-*
 bin/
 .env
 *.env.local
+kcp-gateway/kcp-gateway-config.yaml
+kcp-cli/**/kcp-config.yaml
 kcp-webui/node_modules/
 kcp-webui/.next/
 kcp-webui/out/

@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/kcp-cli/kcp-gateway/config"
+	"github.com/kcp-cli/kcp-gateway/internal/openstack"
 )
 
 // RegisterAuthRoutes 는 인증 관련 라우트를 등록한다
@@ -18,9 +19,9 @@ func RegisterAuthRoutes(rg *gin.RouterGroup, db *sql.DB, cfg *config.Config) {
 }
 
 // RegisterComputeRoutes 는 Compute 관련 라우트를 등록한다
-func RegisterComputeRoutes(rg *gin.RouterGroup, cfg *config.Config) {
+func RegisterComputeRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 	compute := rg.Group("/compute")
-	h := NewComputeHandler(cfg)
+	h := NewComputeHandler(osClient)
 	compute.GET("/servers", h.ListServers)
 	compute.GET("/servers/:id", h.GetServer)
 	compute.POST("/servers", h.CreateServer)
@@ -32,9 +33,9 @@ func RegisterComputeRoutes(rg *gin.RouterGroup, cfg *config.Config) {
 }
 
 // RegisterNetworkRoutes 는 Network 관련 라우트를 등록한다
-func RegisterNetworkRoutes(rg *gin.RouterGroup, cfg *config.Config) {
+func RegisterNetworkRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 	net := rg.Group("/network")
-	h := NewNetworkHandler(cfg)
+	h := NewNetworkHandler(osClient)
 	net.GET("/networks", h.ListNetworks)
 	net.POST("/networks", h.CreateNetwork)
 	net.DELETE("/networks/:id", h.DeleteNetwork)
@@ -52,9 +53,9 @@ func RegisterNetworkRoutes(rg *gin.RouterGroup, cfg *config.Config) {
 }
 
 // RegisterStorageRoutes 는 Storage 관련 라우트를 등록한다
-func RegisterStorageRoutes(rg *gin.RouterGroup, cfg *config.Config) {
+func RegisterStorageRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 	storage := rg.Group("/storage")
-	h := NewStorageHandler(cfg)
+	h := NewStorageHandler(osClient)
 	storage.GET("/volumes", h.ListVolumes)
 	storage.POST("/volumes", h.CreateVolume)
 	storage.DELETE("/volumes/:id", h.DeleteVolume)
@@ -66,9 +67,9 @@ func RegisterStorageRoutes(rg *gin.RouterGroup, cfg *config.Config) {
 }
 
 // RegisterIdentityRoutes 는 Identity 관련 라우트를 등록한다
-func RegisterIdentityRoutes(rg *gin.RouterGroup, cfg *config.Config) {
+func RegisterIdentityRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 	identity := rg.Group("/identity")
-	h := NewIdentityHandler(cfg)
+	h := NewIdentityHandler(osClient)
 	identity.GET("/projects", h.ListProjects)
 	identity.POST("/projects", h.CreateProject)
 	identity.DELETE("/projects/:id", h.DeleteProject)
@@ -80,9 +81,9 @@ func RegisterIdentityRoutes(rg *gin.RouterGroup, cfg *config.Config) {
 }
 
 // RegisterImageRoutes 는 Image 관련 라우트를 등록한다
-func RegisterImageRoutes(rg *gin.RouterGroup, cfg *config.Config) {
+func RegisterImageRoutes(rg *gin.RouterGroup, osClient *openstack.Client) {
 	image := rg.Group("/image")
-	h := NewImageHandler(cfg)
+	h := NewImageHandler(osClient)
 	image.GET("/images", h.ListImages)
 	image.GET("/images/:id", h.GetImage)
 	image.POST("/images", h.UploadImage)
@@ -97,8 +98,8 @@ func RegisterAuditRoutes(rg *gin.RouterGroup, db *sql.DB) {
 }
 
 // RegisterStatsRoutes 는 통계 라우트를 등록한다
-func RegisterStatsRoutes(rg *gin.RouterGroup, cfg *config.Config, db *sql.DB) {
+func RegisterStatsRoutes(rg *gin.RouterGroup, osClient *openstack.Client, db *sql.DB) {
 	stats := rg.Group("/stats")
-	h := NewStatsHandler(cfg, db)
+	h := NewStatsHandler(osClient, db)
 	stats.GET("/dashboard", h.Dashboard)
 }

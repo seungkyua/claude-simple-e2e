@@ -1,0 +1,40 @@
+# KCP Gateway 설정 파일
+# 이 파일을 kcp-gateway-config.yaml 로 복사하고 실제 값으로 수정한 후 사용하세요.
+# 절대로 kcp-gateway-config.yaml 파일을 Git에 커밋하지 마세요.
+#
+# 사용법:
+#   기본: ./kcp-gateway                              (현재 디렉토리의 kcp-gateway-config.yaml 로드)
+#   지정: ./kcp-gateway --config /path/to/config.yaml (지정한 경로에서 로드)
+#   환경변수만: 설정 파일 없이 환경변수로도 실행 가능
+#
+# 우선순위: 환경변수 > YAML 파일 값 > 기본값
+
+server:
+  port: "8080"
+  allowed_origins:
+    - "http://localhost:3000"
+
+database:
+  url: "postgresql://kcp:kcppassword@localhost:5432/kcp?sslmode=disable"
+
+jwt:
+  secret: "your-secret-key-change-this"
+  expiry: "15m"
+
+# OpenStack 연동 (openrc 호환)
+# 환경변수 OS_AUTH_URL, OS_USERNAME 등으로도 설정 가능
+openstack:
+  auth_type: "password"
+  auth_url: "http://127.0.0.1/identity"
+  username: ""
+  user_domain_id: "default"
+  password: ""
+  project_name: "admin"
+  project_domain_id: "default"
+  region_name: "RegionOne"
+  insecure: false
+
+tls:
+  enabled: false
+  cert_path: ""
+  key_path: ""

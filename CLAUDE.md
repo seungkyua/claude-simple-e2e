@@ -68,6 +68,13 @@ Red → Green → Refactor 순서를 반드시 준수한다.
 - 메서드는 하나의 책임만 가진다
 - 이름은 의도를 명확히 드러내야 한다
 
+## Thin Client 원칙
+
+- CLI와 WebUI는 thin client로 유지한다 — 비즈니스 로직을 최소화한다
+- 데이터 조합/enrichment(예: ID→이름 변환, 여러 API 결과 병합)는 반드시 Gateway에서 처리한다
+- CLI/WebUI는 Gateway 응답을 그대로 출력/렌더링하는 역할만 담당한다
+- Gateway가 반환하는 JSON에 클라이언트가 필요한 모든 정보가 포함되어야 한다
+
 ## 구현 완결성 규칙
 
 - 함수/메서드를 생성할 때 반드시 실제 동작하는 로직까지 구현한다

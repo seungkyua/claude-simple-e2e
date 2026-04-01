@@ -109,8 +109,9 @@ func (c *Client) executeRequest(method, path string, body interface{}, result in
 		return fmt.Errorf("요청 생성 실패: %w", err)
 	}
 
-	// 헤더 설정
+	// 헤더 설정: JSON 통신 강제
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
 	if c.token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.token)
@@ -127,28 +128,41 @@ func (c *Client) executeRequest(method, path string, body interface{}, result in
 		return fmt.Errorf("응답 읽기 실패: %w", err)
 	}
 
+	// 응답이 JSON인지 확인 (Content-Type 또는 내용 기반)
+	contentType := resp.Header.Get("Content-Type")
+	isJSON := len(respBody) > 0 && (json.Valid(respBody) ||
+		(len(contentType) > 0 && (contentType == "application/json" ||
+			contentType == "application/json; charset=utf-8")))
+
 	// 에러 응답 처리
 	if resp.StatusCode >= 400 {
-		var errResp ErrorResponse
-		if json.Unmarshal(respBody, &errResp) == nil {
-			return &APIError{
-				StatusCode: resp.StatusCode,
-				Code:       errResp.Error.Code,
-				Message:    errResp.Error.Message,
-				Detail:     errResp.Error.Detail,
-				Retryable:  resp.StatusCode >= 500,
+		if isJSON {
+			var errResp ErrorResponse
+			if json.Unmarshal(respBody, &errResp) == nil && errResp.Error.Code != "" {
+				return &APIError{
+					StatusCode: resp.StatusCode,
+					Code:       errResp.Error.Code,
+					Message:    errResp.Error.Message,
+					Detail:     errResp.Error.Detail,
+					Retryable:  resp.StatusCode >= 500,
+				}
 			}
 		}
+		// JSON이 아니거나 파싱 불가한 에러 → 간결한 메시지로 변환
+		msg := summarizeNonJSONError(resp.StatusCode, respBody)
 		return &APIError{
 			StatusCode: resp.StatusCode,
-			Code:       "UNKNOWN",
-			Message:    string(respBody),
+			Code:       fmt.Sprintf("HTTP_%d", resp.StatusCode),
+			Message:    msg,
 			Retryable:  resp.StatusCode >= 500,
 		}
 	}
 
-	// 응답 파싱
+	// 성공 응답 파싱
 	if result != nil && len(respBody) > 0 {
+		if !isJSON {
+			return fmt.Errorf("서버가 JSON이 아닌 응답을 반환했습니다 (Content-Type: %s)", contentType)
+		}
 		if err := json.Unmarshal(respBody, result); err != nil {
 			return fmt.Errorf("응답 파싱 실패: %w", err)
 		}
@@ -205,5 +219,30 @@ func isRetryable(err error) bool {
 		return e.Retryable
 	default:
 		return false
+	}
+}
+
+// summarizeNonJSONError 는 JSON이 아닌 에러 응답을 간결한 메시지로 변환한다
+func summarizeNonJSONError(statusCode int, body []byte) string {
+	switch statusCode {
+	case 401:
+		return "인증 정보가 유효하지 않습니다. 다시 로그인해주세요."
+	case 403:
+		return "접근이 거부되었습니다."
+	case 404:
+		return "요청한 리소스를 찾을 수 없습니다."
+	case 500:
+		return "서버 내부 오류가 발생했습니다."
+	case 502:
+		return "OpenStack 서비스 연결에 실패했습니다."
+	case 503:
+		return "서비스를 일시적으로 사용할 수 없습니다."
+	default:
+		// 본문이 짧으면 포함, 길면 잘라서 반환
+		s := string(body)
+		if len(s) > 100 {
+			s = s[:100] + "..."
+		}
+		return s
 	}
 }

@@ -1,19 +1,25 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"os"
 
+	"github.com/gin-gonic/gin"
 	"github.com/kcp-cli/kcp-gateway/config"
 	"github.com/kcp-cli/kcp-gateway/internal/database"
 	"github.com/kcp-cli/kcp-gateway/internal/handler"
 	"github.com/kcp-cli/kcp-gateway/internal/middleware"
-	"github.com/gin-gonic/gin"
+	"github.com/kcp-cli/kcp-gateway/internal/openstack"
 )
 
 func main() {
+	// --config 플래그로 설정 파일 경로 지정 (기본: 현재 디렉토리의 kcp-gateway-config.yaml)
+	configPath := flag.String("config", "", "설정 파일 경로 (기본: ./kcp-gateway-config.yaml)")
+	flag.Parse()
+
 	// 서버 설정 로드
-	cfg, err := config.Load()
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("설정 로드 실패: %v", err)
 	}
@@ -35,6 +41,27 @@ func main() {
 		log.Printf("초기 관리자 계정 확인 실패: %v", err)
 	}
 
+	// OpenStack 클라이언트 초기화
+	osClient, err := openstack.NewClient(&openstack.OSConfig{
+		AuthURL:         cfg.OpenStackAuthURL,
+		AuthType:        cfg.OpenStackAuthType,
+		Username:        cfg.OpenStackUsername,
+		Password:        cfg.OpenStackPassword,
+		ProjectID:       cfg.OpenStackProjectID,
+		ProjectName:     cfg.OpenStackProjectName,
+		ProjectDomainID: cfg.OpenStackProjectDomainID,
+		UserDomainID:    cfg.OpenStackUserDomainID,
+		DomainName:      cfg.OpenStackDomainName,
+		RegionName:      cfg.OpenStackRegionName,
+		Insecure:        cfg.OpenStackInsecure,
+	})
+	if err != nil {
+		log.Printf("WARNING: %v", err)
+		log.Println("Gateway는 시작되지만, OpenStack API 호출 시 재인증을 시도합니다")
+	} else {
+		log.Println("OpenStack 인증 성공")
+	}
+
 	// Gin 라우터 설정
 	r := gin.Default()
 
@@ -53,13 +80,13 @@ func main() {
 	auth.Use(middleware.Auth(cfg.JWTSecret, db))
 	auth.Use(middleware.AuditLog(db))
 
-	handler.RegisterComputeRoutes(auth, cfg)
-	handler.RegisterNetworkRoutes(auth, cfg)
-	handler.RegisterStorageRoutes(auth, cfg)
-	handler.RegisterIdentityRoutes(auth, cfg)
-	handler.RegisterImageRoutes(auth, cfg)
+	handler.RegisterComputeRoutes(auth, osClient)
+	handler.RegisterNetworkRoutes(auth, osClient)
+	handler.RegisterStorageRoutes(auth, osClient)
+	handler.RegisterIdentityRoutes(auth, osClient)
+	handler.RegisterImageRoutes(auth, osClient)
 	handler.RegisterAuditRoutes(auth, db)
-	handler.RegisterStatsRoutes(auth, cfg, db)
+	handler.RegisterStatsRoutes(auth, osClient, db)
 
 	// 서버 시작
 	addr := ":" + cfg.Port

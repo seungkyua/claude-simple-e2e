@@ -57,11 +57,15 @@ func runImageList(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "이미지 목록 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "상태", "디스크형식", "크기(MB)"}
+	// openstack image list: ID | Name | Status
+	headers := []string{"ID", "Name", "Status", "Disk Format", "Size"}
 	var rows [][]string
 	for _, img := range resp.Items {
-		sizeMB := img.Size / (1024 * 1024)
-		rows = append(rows, []string{img.ID, img.Name, img.Status, img.DiskFormat, fmt.Sprintf("%d", sizeMB)})
+		size := ""
+		if img.Size > 0 {
+			size = fmt.Sprintf("%d MB", img.Size/(1024*1024))
+		}
+		rows = append(rows, []string{img.ID, img.Name, img.Status, img.DiskFormat, size})
 	}
 	formatOutput(outputFormat, headers, rows, resp.Items)
 	return nil
@@ -78,7 +82,7 @@ func runImageShow(_ *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "이미지 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "상태", "디스크형식", "가시성", "최소디스크(GB)", "최소RAM(MB)"}
+	headers := []string{"ID", "Name", "Status", "Disk Format", "Visibility", "Min Disk (GB)", "Min RAM (MB)"}
 	rows := [][]string{{
 		img.ID, img.Name, img.Status, img.DiskFormat, img.Visibility,
 		fmt.Sprintf("%d", img.MinDisk), fmt.Sprintf("%d", img.MinRAM),

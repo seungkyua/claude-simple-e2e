@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- Project 커맨드 ---
-
 var projectCmd = &cobra.Command{
 	Use:   "project",
 	Short: "프로젝트 관리",
@@ -37,8 +35,6 @@ var projectDeleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE:  runProjectDelete,
 }
-
-// --- User 커맨드 ---
 
 var userCmd = &cobra.Command{
 	Use:   "user",
@@ -67,14 +63,11 @@ var userDeleteCmd = &cobra.Command{
 	RunE:  runUserDelete,
 }
 
-// --- Role 커맨드 ---
-
 var roleCmd = &cobra.Command{
 	Use:   "role",
 	Short: "역할 관리",
 }
 
-// roleAssign 플래그
 var (
 	roleUserID    string
 	roleProjectID string
@@ -93,7 +86,6 @@ var roleRevokeCmd = &cobra.Command{
 	RunE:  runRoleRevoke,
 }
 
-// newIdentityClient 는 설정 파일을 로드하여 IdentityClient를 생성한다
 func newIdentityClient() (sdk.IdentityClient, error) {
 	cfgPath := config.ResolvePath(cfgFile)
 	cfg, err := config.Load(cfgPath)
@@ -104,10 +96,11 @@ func newIdentityClient() (sdk.IdentityClient, error) {
 	return sdk.NewIdentityClient(client), nil
 }
 
+// openstack project list 동일 출력:
+// ID | Name | Domain ID | Description | Enabled
 func runProjectList(_ *cobra.Command, _ []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	resp, err := ic.ListProjects(nil)
@@ -115,14 +108,12 @@ func runProjectList(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "프로젝트 목록 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "설명", "활성"}
+	headers := []string{"ID", "Name", "Domain ID", "Description", "Enabled"}
 	var rows [][]string
 	for _, p := range resp.Items {
-		enabled := "N"
-		if p.Enabled {
-			enabled = "Y"
-		}
-		rows = append(rows, []string{p.ID, p.Name, p.Description, enabled})
+		rows = append(rows, []string{
+			p.ID, p.Name, p.DomainID, p.Description, fmt.Sprintf("%v", p.Enabled),
+		})
 	}
 	formatOutput(outputFormat, headers, rows, resp.Items)
 	return nil
@@ -131,7 +122,6 @@ func runProjectList(_ *cobra.Command, _ []string) error {
 func runProjectDelete(_ *cobra.Command, args []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := ic.DeleteProject(args[0]); err != nil {
@@ -142,10 +132,11 @@ func runProjectDelete(_ *cobra.Command, args []string) error {
 	return nil
 }
 
+// openstack user list 동일 출력:
+// ID | Name | Domain ID | Enabled
 func runUserList(_ *cobra.Command, _ []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	resp, err := ic.ListUsers(nil)
@@ -153,14 +144,12 @@ func runUserList(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "사용자 목록 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "이메일", "활성"}
+	headers := []string{"ID", "Name", "Domain ID", "Enabled"}
 	var rows [][]string
 	for _, u := range resp.Items {
-		enabled := "N"
-		if u.Enabled {
-			enabled = "Y"
-		}
-		rows = append(rows, []string{u.ID, u.Name, u.Email, enabled})
+		rows = append(rows, []string{
+			u.ID, u.Name, u.DomainID, fmt.Sprintf("%v", u.Enabled),
+		})
 	}
 	formatOutput(outputFormat, headers, rows, resp.Items)
 	return nil
@@ -169,7 +158,6 @@ func runUserList(_ *cobra.Command, _ []string) error {
 func runUserDelete(_ *cobra.Command, args []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := ic.DeleteUser(args[0]); err != nil {
@@ -183,7 +171,6 @@ func runUserDelete(_ *cobra.Command, args []string) error {
 func runRoleAssign(_ *cobra.Command, _ []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := ic.AssignRole(roleUserID, roleProjectID, roleRoleID); err != nil {
@@ -197,7 +184,6 @@ func runRoleAssign(_ *cobra.Command, _ []string) error {
 func runRoleRevoke(_ *cobra.Command, _ []string) error {
 	ic, err := newIdentityClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := ic.RevokeRole(roleUserID, roleProjectID, roleRoleID); err != nil {
@@ -209,7 +195,6 @@ func runRoleRevoke(_ *cobra.Command, _ []string) error {
 }
 
 func init() {
-	// Role 플래그 등록
 	roleAssignCmd.Flags().StringVar(&roleUserID, "user", "", "사용자 ID (필수)")
 	roleAssignCmd.Flags().StringVar(&roleProjectID, "project", "", "프로젝트 ID (필수)")
 	roleAssignCmd.Flags().StringVar(&roleRoleID, "role", "", "역할 ID (필수)")

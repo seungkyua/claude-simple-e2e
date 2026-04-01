@@ -9,22 +9,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// --- VM 커맨드 ---
+// --- Server 커맨드 ---
 
-// vmCmd 은 VM 관련 상위 커맨드이다
-var vmCmd = &cobra.Command{
-	Use:   "vm",
-	Short: "VM(서버) 관리",
+var serverCmd = &cobra.Command{
+	Use:     "server",
+	Aliases: []string{"vm"},
+	Short:   "서버(인스턴스) 관리",
 }
 
-// vmListCmd 은 서버 목록을 조회하는 커맨드이다
 var vmListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "서버 목록 조회",
 	RunE:  runVMList,
 }
 
-// vmShowCmd 은 서버 상세 정보를 조회하는 커맨드이다
 var vmShowCmd = &cobra.Command{
 	Use:   "show <id>",
 	Short: "서버 상세 조회",
@@ -32,14 +30,12 @@ var vmShowCmd = &cobra.Command{
 	RunE:  runVMShow,
 }
 
-// vmCreateCmd 은 서버를 생성하는 커맨드이다
 var vmCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "서버 생성",
 	RunE:  runVMCreate,
 }
 
-// vmDeleteCmd 은 서버를 삭제하는 커맨드이다
 var vmDeleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "서버 삭제",
@@ -47,7 +43,6 @@ var vmDeleteCmd = &cobra.Command{
 	RunE:  runVMDelete,
 }
 
-// vmStartCmd 은 서버를 시작하는 커맨드이다
 var vmStartCmd = &cobra.Command{
 	Use:   "start <id>",
 	Short: "서버 시작",
@@ -55,7 +50,6 @@ var vmStartCmd = &cobra.Command{
 	RunE:  runVMAction("start"),
 }
 
-// vmStopCmd 은 서버를 정지하는 커맨드이다
 var vmStopCmd = &cobra.Command{
 	Use:   "stop <id>",
 	Short: "서버 정지",
@@ -63,7 +57,6 @@ var vmStopCmd = &cobra.Command{
 	RunE:  runVMAction("stop"),
 }
 
-// vmRebootCmd 은 서버를 재부팅하는 커맨드이다
 var vmRebootCmd = &cobra.Command{
 	Use:   "reboot <id>",
 	Short: "서버 재부팅",
@@ -73,20 +66,17 @@ var vmRebootCmd = &cobra.Command{
 
 // --- Flavor 커맨드 ---
 
-// flavorCmd 은 Flavor 관련 상위 커맨드이다
 var flavorCmd = &cobra.Command{
 	Use:   "flavor",
 	Short: "Flavor(VM 사양) 관리",
 }
 
-// flavorListCmd 은 Flavor 목록을 조회하는 커맨드이다
 var flavorListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Flavor 목록 조회",
 	RunE:  runFlavorList,
 }
 
-// flavorCreateCmd 은 Flavor를 생성하는 커맨드이다
 var flavorCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Flavor 생성",
@@ -96,7 +86,6 @@ var flavorCreateCmd = &cobra.Command{
 	},
 }
 
-// flavorDeleteCmd 은 Flavor를 삭제하는 커맨드이다
 var flavorDeleteCmd = &cobra.Command{
 	Use:   "delete <id>",
 	Short: "Flavor 삭제",
@@ -104,7 +93,6 @@ var flavorDeleteCmd = &cobra.Command{
 	RunE:  runFlavorDelete,
 }
 
-// newComputeClient 는 설정 파일을 로드하여 ComputeClient를 생성한다
 func newComputeClient() (sdk.ComputeClient, error) {
 	cfgPath := config.ResolvePath(cfgFile)
 	cfg, err := config.Load(cfgPath)
@@ -115,10 +103,12 @@ func newComputeClient() (sdk.ComputeClient, error) {
 	return sdk.NewComputeClient(client), nil
 }
 
+// openstack server list 동일 출력:
+// ID | Name | Status | Networks | Image | Flavor
+// Gateway에서 flavor_name, image_name, networks를 enrichment하여 전달
 func runVMList(_ *cobra.Command, _ []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	resp, err := cc.ListServers(nil)
@@ -126,19 +116,35 @@ func runVMList(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "서버 목록 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "상태", "생성일"}
+
+	headers := []string{"ID", "Name", "Status", "Networks", "Image", "Flavor"}
 	var rows [][]string
 	for _, s := range resp.Items {
-		rows = append(rows, []string{s.ID, s.Name, s.Status, s.Created.Format("2006-01-02 15:04")})
+		// Gateway가 enrichment한 flavor.name, image.name, networks 사용
+		flavorName := s.Flavor.Name
+		if flavorName == "" {
+			flavorName = s.Flavor.ID
+		}
+		imageName := s.Image.Name
+		if imageName == "" {
+			imageName = s.Image.ID
+		}
+		networks := s.Networks
+		if networks == "" {
+			networks = s.FormatNetworks()
+		}
+		rows = append(rows, []string{
+			s.ID, s.Name, s.Status, networks, imageName, flavorName,
+		})
 	}
 	formatOutput(outputFormat, headers, rows, resp.Items)
 	return nil
 }
 
+// openstack server show 동일 출력
 func runVMShow(_ *cobra.Command, args []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	s, err := cc.GetServer(args[0])
@@ -146,13 +152,26 @@ func runVMShow(_ *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "서버 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "상태", "Flavor", "생성일"}
-	rows := [][]string{{s.ID, s.Name, s.Status, s.Flavor.Name, s.Created.Format("2006-01-02 15:04")}}
+
+	flavorName := s.Flavor.Name
+	if flavorName == "" {
+		flavorName = s.Flavor.ID
+	}
+	imageName := s.Image.Name
+	if imageName == "" {
+		imageName = s.Image.ID
+	}
+	networks := s.Networks
+	if networks == "" {
+		networks = s.FormatNetworks()
+	}
+
+	headers := []string{"ID", "Name", "Status", "Networks", "Image", "Flavor"}
+	rows := [][]string{{s.ID, s.Name, s.Status, networks, imageName, flavorName}}
 	formatOutput(outputFormat, headers, rows, s)
 	return nil
 }
 
-// vmCreateName, vmCreateFlavor, vmCreateImage 는 vm create 플래그이다
 var (
 	vmCreateName   string
 	vmCreateFlavor string
@@ -162,7 +181,6 @@ var (
 func runVMCreate(_ *cobra.Command, _ []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	req := &sdk.CreateServerRequest{
@@ -182,7 +200,6 @@ func runVMCreate(_ *cobra.Command, _ []string) error {
 func runVMDelete(_ *cobra.Command, args []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := cc.DeleteServer(args[0]); err != nil {
@@ -193,12 +210,10 @@ func runVMDelete(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-// runVMAction 은 서버 액션(시작/정지/재부팅) 커맨드 핸들러를 반환한다
 func runVMAction(action string) func(*cobra.Command, []string) error {
 	return func(_ *cobra.Command, args []string) error {
 		cc, err := newComputeClient()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 			return err
 		}
 		if err := cc.ServerAction(args[0], action); err != nil {
@@ -210,10 +225,11 @@ func runVMAction(action string) func(*cobra.Command, []string) error {
 	}
 }
 
+// openstack flavor list 동일 출력:
+// ID | Name | RAM | Disk | Ephemeral | VCPUs | Is Public
 func runFlavorList(_ *cobra.Command, _ []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	flavors, err := cc.ListFlavors()
@@ -221,10 +237,20 @@ func runFlavorList(_ *cobra.Command, _ []string) error {
 		fmt.Fprintf(os.Stderr, "Flavor 목록 조회 실패: %v\n", err)
 		return err
 	}
-	headers := []string{"ID", "이름", "vCPU", "RAM(MB)", "Disk(GB)"}
+	headers := []string{"ID", "Name", "RAM", "Disk", "VCPUs", "Is Public"}
 	var rows [][]string
 	for _, f := range flavors {
-		rows = append(rows, []string{f.ID, f.Name, fmt.Sprintf("%d", f.VCPUs), fmt.Sprintf("%d", f.RAM), fmt.Sprintf("%d", f.Disk)})
+		isPublic := "True"
+		if !f.IsPublic {
+			isPublic = "False"
+		}
+		rows = append(rows, []string{
+			f.ID, f.Name,
+			fmt.Sprintf("%d", f.RAM),
+			fmt.Sprintf("%d", f.Disk),
+			fmt.Sprintf("%d", f.VCPUs),
+			isPublic,
+		})
 	}
 	formatOutput(outputFormat, headers, rows, flavors)
 	return nil
@@ -233,7 +259,6 @@ func runFlavorList(_ *cobra.Command, _ []string) error {
 func runFlavorDelete(_ *cobra.Command, args []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "오류: %v\n", err)
 		return err
 	}
 	if err := cc.DeleteFlavor(args[0]); err != nil {
@@ -245,14 +270,13 @@ func runFlavorDelete(_ *cobra.Command, args []string) error {
 }
 
 func init() {
-	// VM 서브커맨드 등록
 	vmCreateCmd.Flags().StringVar(&vmCreateName, "name", "", "서버 이름 (필수)")
 	vmCreateCmd.Flags().StringVar(&vmCreateFlavor, "flavor", "", "Flavor ID (필수)")
 	vmCreateCmd.Flags().StringVar(&vmCreateImage, "image", "", "이미지 ID (필수)")
 
-	vmCmd.AddCommand(vmListCmd, vmShowCmd, vmCreateCmd, vmDeleteCmd, vmStartCmd, vmStopCmd, vmRebootCmd)
+	serverCmd.AddCommand(vmListCmd, vmShowCmd, vmCreateCmd, vmDeleteCmd, vmStartCmd, vmStopCmd, vmRebootCmd)
 	flavorCmd.AddCommand(flavorListCmd, flavorCreateCmd, flavorDeleteCmd)
 
-	rootCmd.AddCommand(vmCmd)
+	rootCmd.AddCommand(serverCmd)
 	rootCmd.AddCommand(flavorCmd)
 }

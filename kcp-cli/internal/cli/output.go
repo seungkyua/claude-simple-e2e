@@ -7,23 +7,45 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-runewidth"
 )
 
-// formatTable 은 헤더와 행 데이터를 ASCII 테이블로 출력한다
+// displayWidth 는 문자열의 터미널 표시 폭을 반환한다.
+// 한국어/한자 등 전각 문자는 2칸, ASCII는 1칸으로 계산한다.
+func displayWidth(s string) int {
+	return runewidth.StringWidth(s)
+}
+
+// padRight 는 문자열을 지정된 표시 폭에 맞춰 오른쪽에 공백을 채운다.
+// 전각 문자의 폭을 올바르게 처리한다.
+func padRight(s string, width int) string {
+	sw := displayWidth(s)
+	if sw >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-sw)
+}
+
+// formatTable 은 헤더와 행 데이터를 ASCII 테이블로 출력한다.
+// 한국어 등 전각 문자의 표시 폭을 올바르게 처리하여 테이블이 깨지지 않는다.
 func formatTable(headers []string, rows [][]string) {
 	if len(headers) == 0 {
 		return
 	}
 
-	// 각 컬럼의 최대 너비를 계산한다
+	// 각 컬럼의 최대 표시 폭을 계산한다
 	widths := make([]int, len(headers))
 	for i, h := range headers {
-		widths[i] = len(h)
+		widths[i] = displayWidth(h)
 	}
 	for _, row := range rows {
 		for i, cell := range row {
-			if i < len(widths) && len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if i < len(widths) {
+				w := displayWidth(cell)
+				if w > widths[i] {
+					widths[i] = w
+				}
 			}
 		}
 	}
@@ -38,7 +60,7 @@ func formatTable(headers []string, rows [][]string) {
 	fmt.Println(sep)
 	fmt.Print("|")
 	for i, h := range headers {
-		fmt.Printf(" %-*s |", widths[i], h)
+		fmt.Printf(" %s |", padRight(h, widths[i]))
 	}
 	fmt.Println()
 	fmt.Println(sep)
@@ -51,7 +73,7 @@ func formatTable(headers []string, rows [][]string) {
 			if i < len(row) {
 				cell = row[i]
 			}
-			fmt.Printf(" %-*s |", widths[i], cell)
+			fmt.Printf(" %s |", padRight(cell, widths[i]))
 		}
 		fmt.Println()
 	}
