@@ -31,6 +31,13 @@ Always follow the instructions in plan.md.
 When I say "go", use the tdd-cycle skill to find the next unmarked test in plan.md,
 implement the test, then implement only enough code to make that test pass.
 
+## TDD 필수 적용 규칙
+
+- 프롬프트, skill, agent 등 어떤 방식으로 프로그래밍을 수행하든 반드시 tdd-cycle skill의 TDD 사이클(Red → Green → Refactor)을 따른다
+- 코드 생성을 요청받으면 먼저 tdd-cycle skill을 참조하여 테스트를 작성한 뒤 구현한다
+- "빠르게 구현해줘", "바로 만들어줘" 등의 요청이 있더라도 TDD 사이클을 생략하지 않는다
+- agent가 병렬로 코드를 생성할 때도 각 모듈별로 테스트 → 구현 순서를 지킨다
+
 ## 절대 금지 사항
 
 - 테스트 없이 프로덕션 코드 작성 금지
@@ -60,6 +67,14 @@ Red → Green → Refactor 순서를 반드시 준수한다.
 - 중복을 발견하면 즉시 제거 (단, Green 상태일 때만)
 - 메서드는 하나의 책임만 가진다
 - 이름은 의도를 명확히 드러내야 한다
+
+## 구현 완결성 규칙
+
+- 함수/메서드를 생성할 때 반드시 실제 동작하는 로직까지 구현한다
+- `// TODO`, `501 NOT_IMPLEMENTED`, 빈 함수 본문 등 스텁(stub) 상태로 남기지 않는다
+- sdd.md의 API 명세와 prd.md의 기능 요구사항에 따라 실제 비즈니스 로직을 작성한다
+- 외부 서비스(OpenStack API 등) 연동이 필요한 경우, kcp-sdk를 통해 실제 호출 코드를 구현한다
+- 기존 코드에 스텁/TODO가 남아 있으면 해당 기능 구현 시 반드시 실제 로직으로 교체한다
 
 ---
 
