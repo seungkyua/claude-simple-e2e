@@ -1,27 +1,53 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AuthGuard from '@/components/layout/AuthGuard'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import DataTable from '@/components/resource/DataTable'
-import type { AuditLog } from '@/types/audit'
+import api from '@/services/api'
+
+interface AuditLog {
+  id: string
+  user_id: string
+  username: string
+  action: string
+  resource_type: string
+  resource_id: string
+  source: string
+  status_code: number
+  ip_address: string
+  created_at: string
+  [key: string]: unknown
+}
 
 const columns = [
-  { key: 'createdAt', label: '시각' },
-  { key: 'user', label: '사용자', render: (log: AuditLog) => log.user?.username || '-' },
-  { key: 'action', label: '작업' },
-  { key: 'resourceType', label: '리소스' },
-  { key: 'source', label: '출처' },
-  { key: 'statusCode', label: '상태', render: (log: AuditLog) => (
-    <span className={log.statusCode < 400 ? 'text-green-400' : 'text-red-400'}>
-      {log.statusCode}
+  { key: 'created_at', label: 'Time', render: (log: AuditLog) => {
+    if (!log.created_at) return '-'
+    return new Date(log.created_at).toLocaleString('ko-KR')
+  }},
+  { key: 'username', label: 'User', render: (log: AuditLog) => log.username || log.user_id?.slice(0, 8) || '-' },
+  { key: 'action', label: 'Action' },
+  { key: 'resource_type', label: 'Resource' },
+  { key: 'source', label: 'Source' },
+  { key: 'status_code', label: 'Status', render: (log: AuditLog) => (
+    <span className={log.status_code < 400 ? 'text-green-400' : 'text-red-400'}>
+      {log.status_code}
     </span>
   )},
+  { key: 'ip_address', label: 'IP' },
 ]
 
 export default function AuditPage() {
-  const [logs] = useState<AuditLog[]>([])
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/audit/logs')
+      .then((res) => setLogs(res.data.items || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   return (
     <AuthGuard>
@@ -31,22 +57,9 @@ export default function AuditPage() {
           <Header />
           <main className="flex-1 overflow-y-auto p-6">
             <h2 className="mb-4 text-xl font-bold">감사 로그</h2>
-            <div className="mb-4 flex gap-2">
-              <select className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm">
-                <option value="">작업 유형</option>
-                <option value="CREATE">CREATE</option>
-                <option value="READ">READ</option>
-                <option value="UPDATE">UPDATE</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-              <select className="rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm">
-                <option value="">리소스 유형</option>
-                <option value="VM">VM</option>
-                <option value="NETWORK">NETWORK</option>
-                <option value="VOLUME">VOLUME</option>
-              </select>
-            </div>
-            <DataTable columns={columns} data={logs} />
+            {loading ? <p className="text-gray-400">로딩 중...</p> : (
+              <DataTable columns={columns} data={logs} total={logs.length} />
+            )}
           </main>
         </div>
       </div>
