@@ -27,14 +27,22 @@ interface Props {
   onCreated: () => void
 }
 
+interface SecurityGroup {
+  id: string
+  name: string
+}
+
 export default function ServerCreateModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState('')
   const [flavorId, setFlavorId] = useState('')
   const [imageId, setImageId] = useState('')
   const [networkIds, setNetworkIds] = useState<string[]>([])
+  const [keyName, setKeyName] = useState('')
+  const [securityGroupId, setSecurityGroupId] = useState('')
   const [flavors, setFlavors] = useState<Flavor[]>([])
   const [images, setImages] = useState<Image[]>([])
   const [networks, setNetworks] = useState<Network[]>([])
+  const [securityGroups, setSecurityGroups] = useState<SecurityGroup[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -43,6 +51,7 @@ export default function ServerCreateModal({ onClose, onCreated }: Props) {
       api.get('/compute/flavors').then((r) => setFlavors(r.data.items || [])),
       api.get('/image/images').then((r) => setImages((r.data.items || []).filter((i: Image) => i.status === 'active'))),
       api.get('/network/networks').then((r) => setNetworks(r.data.items || [])),
+      api.get('/network/security-groups').then((r) => setSecurityGroups(r.data.items || [])),
     ]).catch(() => {})
   }, [])
 
@@ -52,14 +61,17 @@ export default function ServerCreateModal({ onClose, onCreated }: Props) {
     setLoading(true)
 
     try {
-      await api.post('/compute/servers', {
+      // Gateway KCP 형식으로 요청
+      const body: Record<string, unknown> = {
         name,
-        flavorRef: flavorId,
-        imageRef: imageId,
-        networks: networkIds.length > 0
-          ? networkIds.map((id) => ({ uuid: id }))
-          : undefined,
-      })
+        flavorId,
+        imageId,
+      }
+      if (networkIds.length > 0) body.networkIds = networkIds
+      if (keyName) body.keyName = keyName
+      if (securityGroupId) body.securityGroupIds = [securityGroupId]
+
+      await api.post('/compute/servers', body)
       onCreated()
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } }
@@ -153,6 +165,31 @@ export default function ServerCreateModal({ onClose, onCreated }: Props) {
                 ))
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm text-gray-400">Key Name (선택)</label>
+            <input
+              type="text"
+              value={keyName}
+              onChange={(e) => setKeyName(e.target.value)}
+              className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              placeholder="mykey"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm text-gray-400">보안그룹 (선택)</label>
+            <select
+              value={securityGroupId}
+              onChange={(e) => setSecurityGroupId(e.target.value)}
+              className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">기본 보안그룹 사용</option>
+              {securityGroups.map((sg) => (
+                <option key={sg.id} value={sg.id}>{sg.name} ({sg.id.slice(0, 8)}...)</option>
+              ))}
+            </select>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

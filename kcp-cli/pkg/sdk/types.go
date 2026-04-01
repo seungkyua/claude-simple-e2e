@@ -39,6 +39,9 @@ type Server struct {
 	Locked             bool              `json:"locked"`
 	ConfigDrive        string            `json:"config_drive"`
 	Progress           int               `json:"progress"`
+	AdminPass          string            `json:"adminPass,omitempty"`
+	AccessIPv4         string            `json:"accessIPv4"`
+	AccessIPv6         string            `json:"accessIPv6"`
 }
 
 // SecurityGroupRef 는 서버에 할당된 보안그룹 참조이다

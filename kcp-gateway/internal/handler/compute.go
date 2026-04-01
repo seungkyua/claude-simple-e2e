@@ -18,6 +18,7 @@ import (
 type ComputeHandler struct {
 	compute *ossdk.ComputeService
 	image   *ossdk.ImageService
+	net     *ossdk.NetworkService
 }
 
 // NewComputeHandler 는 OpenStack SDK 클라이언트를 주입받아 ComputeHandler를 생성한다
@@ -25,6 +26,7 @@ func NewComputeHandler(osClient *ossdk.Client) *ComputeHandler {
 	return &ComputeHandler{
 		compute: ossdk.NewComputeService(osClient),
 		image:   ossdk.NewImageService(osClient),
+		net:     ossdk.NewNetworkService(osClient),
 	}
 }
 
@@ -187,24 +189,167 @@ func (h *ComputeHandler) GetServer(c *gin.Context) {
 	c.Data(http.StatusOK, "application/json; charset=utf-8", serverRaw)
 }
 
-// CreateServer 는 새로운 서버를 생성한다 (Nova 서버 생성 요청)
+// createServerRequest 는 KCP 서버 생성 요청 형식이다
+type createServerRequest struct {
+	Name             string   `json:"name" binding:"required"`
+	FlavorID         string   `json:"flavorId" binding:"required"`
+	ImageID          string   `json:"imageId" binding:"required"`
+	NetworkIDs       []string `json:"networkIds,omitempty"`
+	SecurityGroupIDs []string `json:"securityGroupIds,omitempty"`
+	KeyName          string   `json:"keyName,omitempty"`
+}
+
+// isUUID 는 문자열이 UUID 형식��지 간단히 판별한다
+func isUUID(s string) bool {
+	// UUID: 8-4-4-4-12 또는 32자 hex
+	if len(s) == 36 && s[8] == '-' && s[13] == '-' && s[18] == '-' && s[23] == '-' {
+		return true
+	}
+	return false
+}
+
+// resolveNameToID 는 리소스 목록에서 이름으로 ID를 찾는다.
+// 이미 UUID 형식이면 그대로 반환한다.
+func resolveNameToID(nameOrID string, items []json.RawMessage) string {
+	if isUUID(nameOrID) {
+		return nameOrID
+	}
+	for _, raw := range items {
+		var item map[string]interface{}
+		if json.Unmarshal(raw, &item) != nil {
+			continue
+		}
+		name, _ := item["name"].(string)
+		id, _ := item["id"].(string)
+		if name == nameOrID {
+			return id
+		}
+	}
+	return nameOrID // 찾지 못하면 원본 반환
+}
+
+// CreateServer 는 새로운 서버를 생성한다.
+// 이름 또는 UUID를 모두 지원한다 (flavor, image, network, security-group).
+// KCP 요청 형식을 Nova API 형식으로 변환한 뒤 호출한다.
 func (h *ComputeHandler) CreateServer(c *gin.Context) {
-	var reqBody map[string]interface{}
-	if err := c.ShouldBindJSON(&reqBody); err != nil {
+	var req createServerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{"code": "INVALID_REQUEST", "message": "요청 본문이 올바르지 않습니다: " + err.Error(), "status": 400},
 		})
 		return
 	}
 
-	result, err := h.compute.CreateServer(reqBody)
+	// flavor 이름 → ID 변환
+	flavorRef := req.FlavorID
+	if !isUUID(flavorRef) {
+		if flavors, err := h.compute.ListFlavors(); err == nil {
+			flavorRef = resolveNameToID(flavorRef, flavors)
+		}
+	}
+
+	// image 이름 → ID 변환
+	imageRef := req.ImageID
+	if !isUUID(imageRef) {
+		if images, err := h.image.ListImages(); err == nil {
+			imageRef = resolveNameToID(imageRef, images)
+		}
+	}
+
+	// Nova API 형식으로 변환
+	novaServer := map[string]interface{}{
+		"name":      req.Name,
+		"flavorRef": flavorRef,
+		"imageRef":  imageRef,
+	}
+
+	// 네트워크 이름 → UUID 변환
+	if len(req.NetworkIDs) > 0 {
+		var networkList []json.RawMessage
+		needResolve := false
+		for _, nid := range req.NetworkIDs {
+			if !isUUID(nid) {
+				needResolve = true
+				break
+			}
+		}
+		if needResolve {
+			networkList, _ = h.net.ListNetworks()
+		}
+
+		var networks []map[string]string
+		for _, nid := range req.NetworkIDs {
+			resolved := nid
+			if !isUUID(nid) && networkList != nil {
+				resolved = resolveNameToID(nid, networkList)
+			}
+			networks = append(networks, map[string]string{"uuid": resolved})
+		}
+		novaServer["networks"] = networks
+	}
+
+	// SSH 키 설정
+	if req.KeyName != "" {
+		novaServer["key_name"] = req.KeyName
+	}
+
+	// 보안그룹 설정 (이름 또는 UUID — Nova는 name으로 받음)
+	if len(req.SecurityGroupIDs) > 0 {
+		var sgs []map[string]string
+		for _, sg := range req.SecurityGroupIDs {
+			sgs = append(sgs, map[string]string{"name": sg})
+		}
+		novaServer["security_groups"] = sgs
+	}
+
+	createResult, err := h.compute.CreateServer(novaServer)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error": gin.H{"code": "OPENSTACK_ERROR", "message": err.Error(), "status": 502},
 		})
 		return
 	}
-	c.Data(http.StatusOK, "application/json; charset=utf-8", result)
+
+	// 생성 응답에서 서버 ID 추출
+	var created map[string]interface{}
+	if json.Unmarshal(createResult, &created) != nil {
+		c.Data(http.StatusCreated, "application/json; charset=utf-8", createResult)
+		return
+	}
+
+	serverID, _ := created["id"].(string)
+	if serverID == "" {
+		c.Data(http.StatusCreated, "application/json; charset=utf-8", createResult)
+		return
+	}
+
+	// 생성 직후 상세 조회 (OpenStack CLI와 동일한 동작)
+	// adminPass는 생성 응답에만 포함되므로 보존한다
+	adminPass, _ := created["adminPass"].(string)
+
+	detail, err := h.compute.GetServer(serverID)
+	if err != nil {
+		// 상세 조회 실패 시 생성 응답 그대로 반환
+		c.Data(http.StatusCreated, "application/json; charset=utf-8", createResult)
+		return
+	}
+
+	// 상세 응답에 adminPass 추가
+	var detailMap map[string]interface{}
+	if json.Unmarshal(detail, &detailMap) == nil && adminPass != "" {
+		detailMap["adminPass"] = adminPass
+		if merged, err := json.Marshal(detailMap); err == nil {
+			detail = merged
+		}
+	}
+
+	// enrichment 적용 후 응답
+	enriched := h.enrichServers([]json.RawMessage{detail})
+	if len(enriched) > 0 {
+		c.Data(http.StatusCreated, "application/json; charset=utf-8", enriched[0])
+		return
+	}
+	c.Data(http.StatusCreated, "application/json; charset=utf-8", detail)
 }
 
 // DeleteServer 는 지정된 서버를 삭제한다

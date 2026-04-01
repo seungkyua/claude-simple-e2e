@@ -32,9 +32,12 @@ var vmShowCmd = &cobra.Command{
 }
 
 var vmCreateCmd = &cobra.Command{
-	Use:   "create",
+	Use:   "create <name>",
 	Short: "서버 생성",
-	RunE:  runVMCreate,
+	Long: `서버를 생성한다. OpenStack CLI와 동일한 인자를 지원한다.
+예: kcp server create --flavor m1.tiny --image <image-id> --network private --key-name mykey --security-group <sg-id> my-server`,
+	Args: cobra.ExactArgs(1),
+	RunE: runVMCreate,
 }
 
 var vmDeleteCmd = &cobra.Command{
@@ -142,48 +145,42 @@ func runVMList(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// openstack server show 동일 출력 (Field/Value 세로 테이블)
-func runVMShow(_ *cobra.Command, args []string) error {
-	cc, err := newComputeClient()
-	if err != nil {
-		return err
-	}
-	s, err := cc.GetServer(args[0])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "서버 조회 실패: %v\n", err)
-		return err
-	}
-
+// serverDetailFields 는 Server 객체를 OpenStack CLI server show 형식의 Field/Value 배열로 변환한다
+func serverDetailFields(s *sdk.Server) [][]string {
 	flavorName := s.Flavor.Name
 	if flavorName == "" {
 		flavorName = s.Flavor.ID
 	}
+	// flavor 표시: "m1.tiny (1)" 형식
+	flavorDisplay := flavorName
+	if s.Flavor.ID != "" && s.Flavor.ID != flavorName {
+		flavorDisplay = fmt.Sprintf("%s (%s)", flavorName, s.Flavor.ID)
+	}
+
 	imageName := s.Image.Name
 	if imageName == "" {
 		imageName = s.Image.ID
 	}
-	imageDisplay := fmt.Sprintf("%s (%s)", imageName, s.Image.ID)
+	imageDisplay := ""
+	if s.Image.ID != "" {
+		imageDisplay = fmt.Sprintf("%s (%s)", imageName, s.Image.ID)
+	}
 
 	networks := s.Networks
 	if networks == "" {
 		networks = s.FormatNetworks()
 	}
 
-	// 보안그룹 포맷
 	var sgNames []string
 	for _, sg := range s.SecurityGroups {
 		sgNames = append(sgNames, fmt.Sprintf("name='%s'", sg.Name))
 	}
-	sgDisplay := strings.Join(sgNames, ", ")
 
-	// 볼륨 포맷
 	var volIDs []string
 	for _, v := range s.VolumesAttached {
 		volIDs = append(volIDs, v.ID)
 	}
-	volDisplay := strings.Join(volIDs, ", ")
 
-	// power state 변환
 	powerState := "NOSTATE"
 	switch s.PowerState {
 	case 1:
@@ -198,35 +195,32 @@ func runVMShow(_ *cobra.Command, args []string) error {
 		powerState = "Suspended"
 	}
 
-	taskState := s.TaskState
-	if taskState == "" {
-		taskState = "None"
-	}
-	description := s.Description
-	if description == "" {
-		description = "None"
-	}
-	terminatedAt := s.TerminatedAt
-	if terminatedAt == "" {
-		terminatedAt = "None"
-	}
-
 	fields := [][]string{
 		{"OS-DCF:diskConfig", s.DiskConfig},
 		{"OS-EXT-AZ:availability_zone", s.AvailabilityZone},
-		{"OS-EXT-SRV-ATTR:host", s.Host},
-		{"OS-EXT-SRV-ATTR:hypervisor_hostname", s.HypervisorHostname},
+		{"OS-EXT-SRV-ATTR:host", noneIfEmpty(s.Host)},
+		{"OS-EXT-SRV-ATTR:hypervisor_hostname", noneIfEmpty(s.HypervisorHostname)},
 		{"OS-EXT-SRV-ATTR:instance_name", s.InstanceName},
 		{"OS-EXT-STS:power_state", powerState},
-		{"OS-EXT-STS:task_state", taskState},
+		{"OS-EXT-STS:task_state", noneIfEmpty(s.TaskState)},
 		{"OS-EXT-STS:vm_state", s.VMState},
-		{"OS-SRV-USG:launched_at", s.LaunchedAt},
-		{"OS-SRV-USG:terminated_at", terminatedAt},
+		{"OS-SRV-USG:launched_at", noneIfEmpty(s.LaunchedAt)},
+		{"OS-SRV-USG:terminated_at", noneIfEmpty(s.TerminatedAt)},
+		{"accessIPv4", s.AccessIPv4},
+		{"accessIPv6", s.AccessIPv6},
 		{"addresses", networks},
+	}
+
+	// adminPass는 서버 생성 직후에만 표시
+	if s.AdminPass != "" {
+		fields = append(fields, []string{"adminPass", s.AdminPass})
+	}
+
+	fields = append(fields, [][]string{
 		{"config_drive", s.ConfigDrive},
 		{"created", s.Created.Format("2006-01-02T15:04:05Z")},
-		{"description", description},
-		{"flavor", flavorName},
+		{"description", noneIfEmpty(s.Description)},
+		{"flavor", flavorDisplay},
 		{"hostId", s.HostID},
 		{"id", s.ID},
 		{"image", imageDisplay},
@@ -235,40 +229,80 @@ func runVMShow(_ *cobra.Command, args []string) error {
 		{"name", s.Name},
 		{"progress", fmt.Sprintf("%d", s.Progress)},
 		{"project_id", s.ProjectID},
-		{"security_groups", sgDisplay},
+		{"security_groups", strings.Join(sgNames, ", ")},
 		{"status", s.Status},
 		{"updated", s.Updated.Format("2006-01-02T15:04:05Z")},
 		{"user_id", s.UserID},
-		{"volumes_attached", volDisplay},
-	}
+		{"volumes_attached", strings.Join(volIDs, ", ")},
+	}...)
 
-	formatDetailOutput(outputFormat, fields, s)
-	return nil
+	return fields
 }
 
-var (
-	vmCreateName   string
-	vmCreateFlavor string
-	vmCreateImage  string
-)
-
-func runVMCreate(_ *cobra.Command, _ []string) error {
+// openstack server show 동일 출력 (Field/Value 세로 테이블)
+func runVMShow(_ *cobra.Command, args []string) error {
 	cc, err := newComputeClient()
 	if err != nil {
 		return err
 	}
+	s, err := cc.GetServer(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "서버 조회 실패: %v\n", err)
+		return err
+	}
+
+	formatDetailOutput(outputFormat, serverDetailFields(s), s)
+	return nil
+}
+
+var (
+	vmCreateFlavor         string
+	vmCreateImage          string
+	vmCreateNetwork        string
+	vmCreateKeyName        string
+	vmCreateSecurityGroup  string
+)
+
+// kcp server create --flavor m1.tiny --image <id> --network private --key-name mykey --security-group <sg-id> <name>
+func runVMCreate(_ *cobra.Command, args []string) error {
+	cc, err := newComputeClient()
+	if err != nil {
+		return err
+	}
+
 	req := &sdk.CreateServerRequest{
-		Name:     vmCreateName,
+		Name:     args[0],
 		FlavorID: vmCreateFlavor,
 		ImageID:  vmCreateImage,
 	}
+	if vmCreateNetwork != "" {
+		req.NetworkIDs = []string{vmCreateNetwork}
+	}
+	if vmCreateKeyName != "" {
+		req.KeyName = vmCreateKeyName
+	}
+	if vmCreateSecurityGroup != "" {
+		req.SecurityGroupIDs = []string{vmCreateSecurityGroup}
+	}
+
 	s, err := cc.CreateServer(req)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "서버 생성 실패: %v\n", err)
 		return err
 	}
-	fmt.Printf("서버 생성 완료: %s (%s)\n", s.Name, s.ID)
+
+	// 생성 후 상세 정보를 Field/Value 형식으로 출력 (openstack server create 동일)
+	// Gateway가 생성 직후 상세 조회 + enrichment + adminPass를 반환한다
+	formatDetailOutput(outputFormat, serverDetailFields(s), s)
 	return nil
+}
+
+// noneIfEmpty 는 빈 문자열이면 "None"을 반환한다
+func noneIfEmpty(s string) string {
+	if s == "" {
+		return "None"
+	}
+	return s
 }
 
 func runVMDelete(_ *cobra.Command, args []string) error {
@@ -344,9 +378,11 @@ func runFlavorDelete(_ *cobra.Command, args []string) error {
 }
 
 func init() {
-	vmCreateCmd.Flags().StringVar(&vmCreateName, "name", "", "서버 이름 (필수)")
-	vmCreateCmd.Flags().StringVar(&vmCreateFlavor, "flavor", "", "Flavor ID (필수)")
-	vmCreateCmd.Flags().StringVar(&vmCreateImage, "image", "", "이미지 ID (필수)")
+	vmCreateCmd.Flags().StringVar(&vmCreateFlavor, "flavor", "", "Flavor 이름 또는 ID (필수)")
+	vmCreateCmd.Flags().StringVar(&vmCreateImage, "image", "", "이미지 이름 또는 ID (필수)")
+	vmCreateCmd.Flags().StringVar(&vmCreateNetwork, "network", "", "네트워크 이름 또는 ID")
+	vmCreateCmd.Flags().StringVar(&vmCreateKeyName, "key-name", "", "SSH 키 이름")
+	vmCreateCmd.Flags().StringVar(&vmCreateSecurityGroup, "security-group", "", "보안그룹 이름 또는 ID")
 
 	serverCmd.AddCommand(vmListCmd, vmShowCmd, vmCreateCmd, vmDeleteCmd, vmStartCmd, vmStopCmd, vmRebootCmd)
 	flavorCmd.AddCommand(flavorListCmd, flavorCreateCmd, flavorDeleteCmd)
