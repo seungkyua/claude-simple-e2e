@@ -19,6 +19,8 @@ test:
 	cd kcp-cli && go test ./...
 	@echo "=== kcp-gateway 테스트 ==="
 	cd kcp-gateway && go test ./...
+	@echo "=== kcp-webui 테스트 ==="
+	cd kcp-webui && npx vitest run
 
 # 린트
 lint:
