@@ -31,12 +31,14 @@ Always follow the instructions in plan.md.
 When I say "go", use the tdd-cycle skill to find the next unmarked test in plan.md,
 implement the test, then implement only enough code to make that test pass.
 
-## TDD 필수 적용 규칙
+## TDD 필수 적용 규칙 (NON-NEGOTIABLE)
 
 - 프롬프트, skill, agent 등 어떤 방식으로 프로그래밍을 수행하든 반드시 tdd-cycle skill의 TDD 사이클(Red → Green → Refactor)을 따른다
 - 코드 생성을 요청받으면 먼저 tdd-cycle skill을 참조하여 테스트를 작성한 뒤 구현한다
-- "빠르게 구현해줘", "바로 만들어줘" 등의 요청이 있더라도 TDD 사이클을 생략하지 않는다
+- "빠르게 구현해줘", "바로 만들어줘", "자동으로 진행해줘", "끝까지 진행해줘", "프로그램을 작성해줘", "코드를 작성해줘", "코드를 변경해줘", "구현해줘", "수정해줘", "고쳐줘", "fix 해줘" 등 프로덕션 코드가 변경되는 어떤 요청이든 TDD 사이클을 절대 생략하지 않는다
 - agent가 병렬로 코드를 생성할 때도 각 모듈별로 테스트 → 구현 순서를 지킨다
+- 프로덕션 코드 파일을 생성하면 반드시 같은 작업 내에서 대응하는 테스트 파일도 함께 생성한다
+- 테스트 없이 생성된 프로덕션 코드가 발견되면 즉시 테스트를 작성한 후 다음 작업으로 넘어간다
 
 ## 절대 금지 사항
 
