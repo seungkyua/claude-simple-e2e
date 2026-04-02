@@ -39,6 +39,7 @@ implement the test, then implement only enough code to make that test pass.
 - agent가 병렬로 코드를 생성할 때도 각 모듈별로 테스트 → 구현 순서를 지킨다
 - 프로덕션 코드 파일을 생성하면 반드시 같은 작업 내에서 대응하는 테스트 파일도 함께 생성한다
 - 테스트 없이 생성된 프로덕션 코드가 발견되면 즉시 테스트를 작성한 후 다음 작업으로 넘어간다
+- 한 번에 하나의 테스트만 작성하고, 통과시킨 후 다음으로 넘어간다
 
 ## 절대 금지 사항
 
@@ -53,11 +54,6 @@ implement the test, then implement only enough code to make that test pass.
 2. 컴파일러/린터 경고 0개 확인
 3. 커밋 메시지에 반드시 `[structural]` 또는 `[behavioral]` 접두사 포함
 
-## TDD 사이클 순서
-
-Red → Green → Refactor 순서를 반드시 준수한다.
-한 번에 하나의 테스트만 작성하고, 통과시킨 후 다음으로 넘어간다.
-
 ## Tidy First 원칙
 
 - STRUCTURAL: 이름 변경, 메서드 추출, 코드 이동 — 동작 변경 없음
@@ -69,6 +65,19 @@ Red → Green → Refactor 순서를 반드시 준수한다.
 - 중복을 발견하면 즉시 제거 (단, Green 상태일 때만)
 - 메서드는 하나의 책임만 가진다
 - 이름은 의도를 명확히 드러내야 한다
+
+---
+
+# 구현 규칙
+
+## 구현 완결성
+
+- 함수/메서드를 생성할 때 반드시 실제 동작하는 로직까지 구현한다
+- `// TODO`, `501 NOT_IMPLEMENTED`, 빈 함수 본문 등 스텁(stub) 상태로 남기지 않는다
+- sdd.md의 API 명세와 prd.md의 기능 요구사항에 따라 실제 비즈니스 로직을 작성한다
+- 외부 서비스 연동이 필요한 경우 실제 호출 코드를 구현한다
+- 기존 코드에 스텁/TODO가 남아 있으면 해당 기능 구현 시 반드시 실제 로직으로 교체한다
+- 코드를 수정한 후에는 반드시 `make build`로 바이너리를 재빌드한다
 
 ## 매직 넘버/하드코딩 금지
 
@@ -84,14 +93,6 @@ Red → Green → Refactor 순서를 반드시 준수한다.
 - 데이터 조합/enrichment(예: ID→이름 변환, 여러 API 결과 병합)는 반드시 Gateway에서 처리한다
 - CLI/WebUI는 Gateway 응답을 그대로 출력/렌더링하는 역할만 담당한다
 - Gateway가 반환하는 JSON에 클라이언트가 필요한 모든 정보가 포함되어야 한다
-
-## 구현 완결성 규칙
-
-- 함수/메서드를 생성할 때 반드시 실제 동작하는 로직까지 구현한다
-- `// TODO`, `501 NOT_IMPLEMENTED`, 빈 함수 본문 등 스텁(stub) 상태로 남기지 않는다
-- sdd.md의 API 명세와 prd.md의 기능 요구사항에 따라 실제 비즈니스 로직을 작성한다
-- 외부 서비스(OpenStack API 등) 연동이 필요한 경우, kcp-sdk를 통해 실제 호출 코드를 구현한다
-- 기존 코드에 스텁/TODO가 남아 있으면 해당 기능 구현 시 반드시 실제 로직으로 교체한다
 
 ---
 
@@ -118,3 +119,12 @@ Red → Green → Refactor 순서를 반드시 준수한다.
 - 라이선스 검토 내역
 
 을 출력한 뒤, 상세 한국어 주석과 함께 방어 로직이 결합된 코드를 내보낸다.
+
+---
+
+# 세부 규칙 참조
+
+아래 규칙의 세부 사항은 `.claude/rules/` 디렉토리에서 관리한다:
+- **프로그래밍 세부 규칙**: `.claude/rules/programming-rule.md` (설정 파일, 인증, CLI 출력, 통신 포맷, 테스트 커버리지, agent 위임 규칙)
+- **TDD 제약 상세**: `.claude/rules/tdd-constraints.md` (Red/Green/Refactor 단계별 상세 규칙, 결함 수정 순서)
+- **단계별 개발 순서**: `.claude/rules/phased-development.md` (4단계 개발 순서, 단계 전환 조건)
