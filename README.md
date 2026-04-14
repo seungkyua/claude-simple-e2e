@@ -105,3 +105,22 @@ Simple end‑to‑end development using Claude Code
 
   # 경로 지정
   make run-gateway CONFIG=/path/to/config.yaml
+
+
+---
+테스트 실행 방법
+
+  # 전체 테스트 실행
+  cd kcp-webui && npm test
+
+  # 또는
+  cd kcp-webui && npx vitest run
+
+  # watch 모드 (파일 변경 시 자동 재실행)
+  cd kcp-webui && npx vitest
+
+  # 특정 파일만 테스트
+  cd kcp-webui && npx vitest run src/stores/authStore.test.ts
+
+  # 커버리지 확인
+  cd kcp-webui && npx vitest run --coverage
