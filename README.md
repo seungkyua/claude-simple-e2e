@@ -69,6 +69,10 @@ Simple end‑to‑end development using Claude Code
   Username: admin
   Password: admin123
 
+  db login:
+  nerdctl exec -it kcp-postgres bash
+  /# psql -d kcp -h localhost -p 5432 -U kcp
+
   관리자 계정 커스터마이징 (환경변수):
   KCP_ADMIN_USER=myadmin KCP_ADMIN_PASSWORD=mypassword make run-gateway
 
